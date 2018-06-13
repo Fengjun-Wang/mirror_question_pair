@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-
+from sklearn.feature_extraction.text import TfidfVectorizer
 class DataSet(object):
     train_path = '../../input/train.csv'
     test_path = '../../input/test.csv'
@@ -32,6 +32,22 @@ class DataSet(object):
         columns = ["word2vec_c_"+str(i) for i in range(char_embed_df.shape[1])]
         char_embed_df.columns = columns
         return char_embed_df
+
+class Feature(object):
+    @staticmethod
+    def load_ques_term_tfidf_matrix(question_df,space,max_n_gram):
+        vectorizer = TfidfVectorizer(ngram_range=(1,max_n_gram))
+        if space=="word":
+            corpus = question_df["words"]
+        elif space=="char":
+            corpus = question_df["chars"]
+        else:
+            raise ValueError("Unrecognized value '%s' for parameter 'space'. It should be 'word' or 'char'."%(space))
+        tfidf_mat = vectorizer.fit_transform(corpus)
+        return vectorizer,tfidf_mat
+    
+    @staticmethod
+
 
 
 if __name__ == "__main__":
