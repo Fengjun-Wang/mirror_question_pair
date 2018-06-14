@@ -12,6 +12,7 @@
         - find paper
         - simply (weighted)average of word2vec embedding
             - weight could be done according to tf-idf value 
+        - [WMD](https://towardsdatascience.com/sentence-embedding-3053db22ea77)
     - get other embedding 
         - glove
         - fasttex
@@ -19,7 +20,14 @@
     - Siamese
         - CNN
         - RNN
-
+* vector distance
+    - cosine similarity
+    - L2
+    - L1 
+    - Sigmoid kerne
+    - RBF kernel
+    - Laplacian kernel
+    - Chi-squared kernel
 ## Resources:
 [Quora question pair 1st solution](https://www.kaggle.com/c/quora-question-pairs/discussion/34355)
 
