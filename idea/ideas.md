@@ -22,6 +22,7 @@
 
 ## Resources:
 [Quora question pair 1st solution](https://www.kaggle.com/c/quora-question-pairs/discussion/34355)
+
 [MatchZoo](https://github.com/faneshion/MatchZoo)
 
     
