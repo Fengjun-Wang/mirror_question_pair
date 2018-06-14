@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD
+
 class DataSet(object):
     train_path = '../../input/train.csv'
     test_path = '../../input/test.csv'
@@ -33,9 +35,15 @@ class DataSet(object):
         char_embed_df.columns = columns
         return char_embed_df
 
+class F(object):
+    @staticmethod
+    def reverse_dictionary(input_dict):
+        """reverse the key-value pair into value-key pair"""
+        return {v:k for k,v in input_dict.items()}
+
 class Feature(object):
     @staticmethod
-    def load_ques_term_tfidf_matrix(question_df,space,max_n_gram):
+    def get_ques_term_tfidf_matrix(question_df,space,max_n_gram):
         vectorizer = TfidfVectorizer(ngram_range=(1,max_n_gram))
         if space=="word":
             corpus = question_df["words"]
@@ -45,8 +53,31 @@ class Feature(object):
             raise ValueError("Unrecognized value '%s' for parameter 'space'. It should be 'word' or 'char'."%(space))
         tfidf_mat = vectorizer.fit_transform(corpus)
         return vectorizer,tfidf_mat
-    
+
     @staticmethod
+    def get_SVD_feature(vectorizer,tfidf_mat,num_component):
+        svder = TruncatedSVD(n_components=num_component, algorithm='arpack')
+        svd_U = svder.fit_transform(tfidf_mat)
+        svd_V = svder.components_
+        w2i = vectorizer.vocabulary_
+        i2w = F.reverse_dictionary(w2i)
+        indexes = [i2w[i] for i in xrange(svd_V.shape[1])]
+        svd_word_embeddf = pd.DataFrame(svd_V.T,index=indexes)
+        return svd_U,svd_word_embeddf
+
+    @staticmethod
+    def wemb2semb(word_embed_df,word_list,weights=None):
+        """
+
+        :param word_embed_df: word_embed_dataframe, words as index
+        :param word_list: the word list we need to form sentence embedding
+        :param weights: the weights of all words. default is None, equally weighted
+        :return: sentence embedding
+        """
+        word_embeds = word_embed_df.loc[word_list]
+        if weights==None:
+            return word_embeds.values.mean(axis=0)
+
 
 
 
