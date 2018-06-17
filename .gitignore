@@ -10,6 +10,12 @@ __pycache__/
 *.png
 *.txt
 *.csv
+*.pkl
+*.npz
+*.npy
+.npy
+.npz
+.pkl
 # Distribution / packaging
 .Python
 input/
