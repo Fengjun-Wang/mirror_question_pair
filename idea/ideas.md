@@ -36,3 +36,14 @@
     
 https://github.com/YuriyGuts/kaggle-quora-question-pairs
 
+## TO DO
+* [LDA NNE Embedding](http://scikit-learn.org/stable/auto_examples/applications/plot_topics_extraction_with_nmf_lda.html#sphx-glr-auto-examples-applications-plot-topics-extraction-with-nmf-lda-py): 
+    - all kinds of distance
+    - absdiff
+* Add original embedding:
+    - Word SVD absdiff
+    - Char SVD absdiff
+    - Glove tfidf linear word (becasue word2vec already used equally)
+    - Glove tfidf linear char
+    - not add SVD word/char to sentence
+    - maybe remove SVD word/char to sentence 
