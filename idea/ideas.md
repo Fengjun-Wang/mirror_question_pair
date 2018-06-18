@@ -47,3 +47,5 @@ https://github.com/YuriyGuts/kaggle-quora-question-pairs
     - Glove tfidf linear char
     - not add SVD word/char to sentence
     - maybe remove SVD word/char to sentence 
+* Add meta feature:
+    - question ends the same, or starts the same
