@@ -49,3 +49,6 @@ https://github.com/YuriyGuts/kaggle-quora-question-pairs
     - maybe remove SVD word/char to sentence 
 * Add meta feature:
     - question ends the same, or starts the same
+    
+* Add graph feature:
+    - page rank
