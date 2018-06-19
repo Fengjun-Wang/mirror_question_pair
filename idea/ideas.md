@@ -37,8 +37,9 @@
     
 https://github.com/YuriyGuts/kaggle-quora-question-pairs
 
-[bacth lstm pytorch](https://gist.github.com/Tushar-N/dfca335e370a2bc3bc79876e6270099e)
-[bacth lstm pytorch](https://github.com/ngarneau/understanding-pytorch-batching-lstm/blob/master/Understanding%20Pytorch%20Batching.ipynb)
+[bacth lstm pytorch_1](https://gist.github.com/Tushar-N/dfca335e370a2bc3bc79876e6270099e)
+
+[bacth lstm pytorch_2](https://github.com/ngarneau/understanding-pytorch-batching-lstm/blob/master/Understanding%20Pytorch%20Batching.ipynb)
 
 ## TO DO
 * [LDA NNE Embedding](http://scikit-learn.org/stable/auto_examples/applications/plot_topics_extraction_with_nmf_lda.html#sphx-glr-auto-examples-applications-plot-topics-extraction-with-nmf-lda-py): 
