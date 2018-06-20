@@ -39,8 +39,10 @@ https://github.com/YuriyGuts/kaggle-quora-question-pairs
 
 [bacth lstm pytorch_1](https://gist.github.com/Tushar-N/dfca335e370a2bc3bc79876e6270099e)
 
-[Siamese Manhattan LSTM](https://medium.com/mlreview/implementing-malstm-on-kaggles-quora-question-pairs-competition-8b31b0b16a07)
 
+
+[Siamese Manhattan LSTM](https://medium.com/mlreview/implementing-malstm-on-kaggles-quora-question-pairs-competition-8b31b0b16a07)
+[paper siamese Manhattan LSTM](http://www.mit.edu/~jonasm/info/MuellerThyagarajan_AAAI16.pdf)
 [bacth lstm pytorch_2](https://github.com/ngarneau/understanding-pytorch-batching-lstm/blob/master/Understanding%20Pytorch%20Batching.ipynb)
 
 ## TO DO
