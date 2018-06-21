@@ -47,7 +47,7 @@ del X_val
 del y_val
 gc.collect()
 params = {
-    'boosting_type': 'gbdt',
+    'boosting_type': 'dart', ###TODO gdbt->dart
     'objective': 'binary',
     'metric': 'binary_logloss',
     'num_leaves': 127,
@@ -65,8 +65,8 @@ gbm = lgb.train(params,
                 valid_sets=[lgb_eval], # eval training data
                 valid_names = ["val"],
                 feature_name=feature_names,
-                early_stopping_rounds=50,
-                learning_rates=lambda iter: 0.19 * (0.99 ** iter),
+                early_stopping_rounds=20, ###TODO 50->20
+                learning_rates=lambda iter: 0.2 * (0.99 ** iter), ###TODO 0.15->0.2
                 evals_result = eva_res)
 print('Save model...')
 # save model to file

@@ -47,13 +47,13 @@ del X_val
 del y_val
 gc.collect()
 params = {
-    'boosting_type': 'gbdt',
+    'boosting_type': 'dart', ###TODO gdbt->dart
     'objective': 'binary',
     'metric': 'binary_logloss',
     'num_leaves': 127,
-    'feature_fraction': 0.9,
-    'bagging_fraction': 0.9,
-    'bagging_freq': 20,
+    'feature_fraction': 1.0, ###TODO 0.9->1
+    'bagging_fraction': 1.0, ###TODO 0.9->1
+    'bagging_freq': 0, ###TODO 20->0
     "device":"gpu",
     "max_bin":255
 }
@@ -65,8 +65,8 @@ gbm = lgb.train(params,
                 valid_sets=[lgb_eval], # eval training data
                 valid_names = ["val"],
                 feature_name=feature_names,
-                early_stopping_rounds=50,
-                learning_rates=lambda iter: 0.19 * (0.99 ** iter),
+                early_stopping_rounds=20,
+                learning_rates=lambda iter: 0.2 * (0.995 ** iter), ###TODO 0.99->0.995
                 evals_result = eva_res)
 print('Save model...')
 # save model to file

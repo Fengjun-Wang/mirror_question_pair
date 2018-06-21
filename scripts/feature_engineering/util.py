@@ -249,6 +249,20 @@ class F(object):
         return len(set1.intersection(set2))/float(len(union))
 
     @staticmethod
+    def if_starts_same(s1,s2):
+        if s1[0]==s2[0]:
+            return 1
+        else:
+            return 0
+
+    @staticmethod
+    def if_ends_same(s1,s2):
+        if s1[-1]==s2[-1]:
+            return 1
+        else:
+            return 0
+
+    @staticmethod
     def levenshtein_sentence(s1,s2):
         term_set = list(set(s1+s2))
         char_set = string.printable
@@ -625,14 +639,19 @@ def generate_senten_embed_comparion_features(dataset):
     #                        "words_3gram_sentence_tfidf_embedding.npz",
     #                        "chars_5gram_sentence_tfidf_embedding.npz"
     #                        ]
-    sentence_embeddings = [
-        "glove_char_embed_to_sentence_embed_mode_equally.npy",
-        "glove_char_embed_to_sentence_embed_mode_tf_idf_exp.npy",
-        "glove_char_embed_to_sentence_embed_mode_tf_idf_linear.npy",
-        "glove_word_embed_to_sentence_embed_mode_equally.npy",
-        "glove_word_embed_to_sentence_embed_mode_tf_idf_exp.npy",
-        "glove_word_embed_to_sentence_embed_mode_tf_idf_linear.npy",
-    ]
+    # sentence_embeddings = [
+    #     "glove_char_embed_to_sentence_embed_mode_equally.npy",
+    #     "glove_char_embed_to_sentence_embed_mode_tf_idf_exp.npy",
+    #     "glove_char_embed_to_sentence_embed_mode_tf_idf_linear.npy",
+    #     "glove_word_embed_to_sentence_embed_mode_equally.npy",
+    #     "glove_word_embed_to_sentence_embed_mode_tf_idf_exp.npy",
+    #     "glove_word_embed_to_sentence_embed_mode_tf_idf_linear.npy",
+    # ]
+
+    sentence_embeddings = ["chars_1gram_tfidf_NMF_sentence_embed.npy",
+                           "words_1gram_tfidf_NMF_sentence_embed.npy",
+                           "chars_1gram_tf_LDA_sentence_embed.npy",
+                           "words_1gram_tf_LDA_sentence_embed.npy"]
     feature_list1_for_nottfidf =    [cosine_similarity,
                                     linear_kernel,
                                     polynomial_kernel,
@@ -720,6 +739,8 @@ def generate_question_pairs_meta_features(dataset):
                                   F.spair_len_dif_over_min,\
                                   F.spair_len_dif_over_mean,\
                                   F.levenshtein,\
+                                  F.if_starts_same,\
+                                  F.if_ends_same
                                   ]+\
                                  [F.num_commom_n_gram(i) for i in range(1,n+1)]+\
                                  [F.jaccard_till_n_gram(n)]
@@ -743,8 +764,17 @@ def generate_question_pairs_embed_orig_features(dataset):
         data = DataSet.load_test()
     p1_list = data["q1"]
     p2_list = data["q2"]
-    question_embeds = ["word2vec_word_embed_to_sentence_embed_mode_equally.npy",
-                      "word2vec_char_embed_to_sentence_embed_mode_equally.npy"]
+    # question_embeds = ["word2vec_word_embed_to_sentence_embed_mode_equally.npy",
+    #                   "word2vec_char_embed_to_sentence_embed_mode_equally.npy"]
+    question_embeds = ["words_3gram_tfidf_SVD_sentence_embed.npy",
+                       "chars_5gram_tfidf_SVD_sentence_embed.npy",
+                       "glove_char_embed_to_sentence_embed_mode_tf_idf_linear.npy",
+                       "glove_word_embed_to_sentence_embed_mode_tf_idf_linear.npy",
+                       "words_1gram_tf_LDA_sentence_embed.npy",
+                       "chars_1gram_tf_LDA_sentence_embed.npy",
+                       "chars_1gram_tfidf_NMF_sentence_embed.npy",
+                       "words_1gram_tfidf_NMF_sentence_embed.npy"
+                       ]
     for qe_path in question_embeds:
         prefix = qe_path.split(".")[0]
         ques_emb = DataSet.load_inters(os.path.join(inters_folder,qe_path))
@@ -805,18 +835,24 @@ def gen_and_store_intermediate_resutls_chars():
 
 def combine_feature_pdfs():
     in_folder = "../../inters/partial_features/"
+    out_folder = "../../inters/final_features"
     all_feature_files = os.listdir(in_folder)
     all_train_feature_files = [file for file in all_feature_files if file.startswith("train")]
     all_train_features_df = [pd.read_csv(os.path.join(in_folder,file)) for file in all_train_feature_files ]
     train_feature = pd.concat(all_train_features_df,axis=1)
+    del all_train_features_df
+    gc.collect()
     label = DataSet.load_train()["label"]
     train_feature["label"]=label
+    train_feature.to_csv(os.path.join(out_folder,"train_type2.csv"),index=False)
+    del train_feature
+    gc.collect()
     all_test_feature_files = [file.replace("train","test") for file in all_train_feature_files]
     all_test_features_df = [pd.read_csv(os.path.join(in_folder,file)) for file in all_test_feature_files ]
     test_feature = pd.concat(all_test_features_df,axis=1)
-    out_folder = "../../inters/final_features"
-    train_feature.to_csv(os.path.join(out_folder,"train_type1.csv"),index=False)
-    test_feature.to_csv(os.path.join(out_folder,"test_type1.csv"),index=False)
+    del all_test_features_df
+    gc.collect()
+    test_feature.to_csv(os.path.join(out_folder,"test_type2.csv"),index=False)
 
 if __name__ == "__main__":
     #gen_and_store_intermediate_resutls_chars()
@@ -869,14 +905,16 @@ if __name__ == "__main__":
 
     #meta_test=  Feature.get_question_pairs_metadata_feature_set(p1, p2, meta_feature_list, qs, "words")
     #meta_test.to_csv("metatest.csv",index=False)
-    #generate_senten_embed_comparion_features("train")
-    #generate_senten_embed_comparion_features("test")
+    # generate_senten_embed_comparion_features("train")
+    # generate_senten_embed_comparion_features("test")
     #generate_question_pairs_WMD_distance_features("train")
     #generate_question_pairs_WMD_distance_features("test")
-    #generate_question_pairs_meta_features("train")
-    #generate_question_pairs_meta_features("test")
-    #generate_question_pairs_embed_orig_features("train")
-    #generate_question_pairs_embed_orig_features("test")
+    # generate_question_pairs_meta_features("train")
+    # generate_question_pairs_meta_features("test")
+    # generate_question_pairs_embed_orig_features("train")
+    # generate_question_pairs_embed_orig_features("test")
     #gen_and_store_intermediate_resutls_words()
     #gen_and_store_intermediate_resutls_chars()
+    #combine_feature_pdfs()
     combine_feature_pdfs()
+
