@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
 import string
 import pandas as pd
 import numpy as np
 import pickle
 import multiprocessing as mp
 import gc,os
+from past.builtins import xrange
+from functools import reduce
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 from scipy.sparse import issparse
 from nltk import ngrams
-from sklearn.externals import joblib
 from scipy import sparse
 from sklearn.metrics.pairwise import cosine_similarity,\
                                      linear_kernel,\
@@ -24,8 +26,8 @@ from sklearn.metrics.pairwise import cosine_similarity,\
 
 def _do_get_question_embedding_from_term_embedding_task(question_df, term_embed_df, space, w2i, tfidf_mat, avergemethod,
                                                         slice_num, queue):
-    print "subprocess %s is doing _do_get_question_embedding_from_term_embedding_task: %s" % (
-    os.getpid(), question_df.shape[0])
+    print("subprocess %s is doing _do_get_question_embedding_from_term_embedding_task: %s" % (
+    os.getpid(), question_df.shape[0]))
     res = []
     for i in xrange(question_df.shape[0]):
         cur_row = question_df.iloc[i]
@@ -45,12 +47,12 @@ def _do_get_question_embedding_from_term_embedding_task(question_df, term_embed_
     queue.put((np.array(res), slice_num))
 
 def _do_get_question_pairs_embedding_comparison_feature_set_task(p1_list,p2_list,fea_func_list,question_embed_df,slice_num,queue):
-    print "subprocess %s is doing _do_get_question_pairs_embedding_comparison_feature_set_task: %s" % (
-        os.getpid(), len(p1_list))
+    print("subprocess %s is doing _do_get_question_pairs_embedding_comparison_feature_set_task: %s" % (
+        os.getpid(), len(p1_list)))
     res = []
     for i, (p1, p2) in enumerate(zip(p1_list, p2_list)):
         if i%2000==0:
-            print os.getpid(),i
+            print(os.getpid(),i)
         p1_ind = int(p1[1:])
         p2_ind = int(p2[1:])
         p1_emb = question_embed_df[p1_ind:p1_ind + 1]
@@ -59,13 +61,13 @@ def _do_get_question_pairs_embedding_comparison_feature_set_task(p1_list,p2_list
     queue.put((np.array(res),slice_num))
 
 def _do_get_question_pairs_WMD_disctance_task(p1_list,p2_list,question_df,term_embed_df,space,slice_num,queue):
-    print "subprocess %s is doing _do_get_question_pairs_WMD_disctance_task: %s" % (os.getpid(), len(p1_list))
+    print("subprocess %s is doing _do_get_question_pairs_WMD_disctance_task: %s" % (os.getpid(), len(p1_list)))
     df = []
     i=0
     for p1,p2 in zip(p1_list,p2_list):
         i+=1
         if i%2000==0:
-            print os.getpid(),i
+            print(os.getpid(),i)
         p1_ind = int(p1[1:])
         p2_ind = int(p2[1:])
         p1_terms = question_df.iloc[p1_ind][space].split()
@@ -374,7 +376,7 @@ class Feature(object):
             res = []
             for i in xrange(question_df.shape[0]):
                 if i % 2000 == 0:
-                    print i
+                    print(i)
                 cur_row = question_df.iloc[i]
                 term_list = cur_row[space].split(" ")
                 if avergemethod == "equally":
@@ -398,7 +400,7 @@ class Feature(object):
             ques_cnt = question_df.shape[0]
             cnt_per_cpu = ques_cnt / cpu_cnt if ques_cnt % cpu_cnt == 0 else ques_cnt / cpu_cnt + 1
             for i in xrange(cpu_cnt):
-                print i
+                print(i)
                 if cnt_per_cpu * (i + 1) > ques_cnt:
                     end = ques_cnt
                 else:
@@ -412,7 +414,7 @@ class Feature(object):
                                     avergemethod,
                                     i,
                                     queue))
-            print "waiting.."
+            print("waiting..")
             p.close()
             p.join()
             tmp_res = []
@@ -442,7 +444,7 @@ class Feature(object):
             res = []
             for i,(p1,p2) in enumerate(zip(p1_list,p2_list)):
                 if i%2000==0:
-                    print i
+                    print(i)
                 p1_ind = int(p1[1:])
                 p2_ind = int(p2[1:])
                 p1_emb = question_embed_df[p1_ind:p1_ind+1]
@@ -459,7 +461,7 @@ class Feature(object):
             ques_cnt = len(p1_list)
             cnt_per_cpu = ques_cnt / cpu_cnt if ques_cnt % cpu_cnt == 0 else ques_cnt / cpu_cnt + 1
             for i in xrange(cpu_cnt):
-                print i
+                print(i)
                 if cnt_per_cpu * (i + 1) > ques_cnt:
                     end = ques_cnt
                 else:
@@ -471,7 +473,7 @@ class Feature(object):
                                     question_embed_df,
                                     i,
                                     queue))
-            print "waiting.."
+            print("waiting..")
             p.close()
             p.join()
             tmp_res = []
@@ -495,7 +497,7 @@ class Feature(object):
             for p1,p2 in zip(p1_list,p2_list):
                 i+=1
                 if i%2000==0:
-                    print i
+                    print(i)
                 p1_ind = int(p1[1:])
                 p2_ind = int(p2[1:])
                 p1_terms = question_df.iloc[p1_ind][space].split()
@@ -515,7 +517,7 @@ class Feature(object):
             ques_cnt = len(p1_list)
             cnt_per_cpu = ques_cnt / cpu_cnt if ques_cnt % cpu_cnt == 0 else ques_cnt / cpu_cnt + 1
             for i in xrange(cpu_cnt):
-                print i
+                print(i)
                 if cnt_per_cpu * (i + 1) > ques_cnt:
                     end = ques_cnt
                 else:
@@ -528,7 +530,7 @@ class Feature(object):
                                     space,
                                     i,
                                     queue))
-            print "waiting.."
+            print("waiting..")
             p.close()
             p.join()
             tmp_res = []
@@ -559,7 +561,7 @@ class Feature(object):
         for p1,p2 in zip(p1_list,p2_list):
             i+=1
             if i%2000==0:
-                print i
+                print(i)
             p1_ind = int(p1[1:])
             p2_ind = int(p2[1:])
             if issparse(question_embed_df):
@@ -577,7 +579,7 @@ class Feature(object):
             else:
                 raise ValueError("Unrecognized value '%s' for parameter 'mode'."%(mode))
             df.append(res)
-        print len(p1_emb),len(p2_emb)
+        print(len(p1_emb),len(p2_emb))
         if mode=="keep":
             columns = [fea_name_prefix + "_orig_p1_" + str(i) for i in xrange(len(p1_emb))] +\
                       [fea_name_prefix + "_orig_p2_" + str(i) for i in xrange(len(p2_emb))]
@@ -598,7 +600,7 @@ class Feature(object):
         for p1,p2 in zip(p1_list,p2_list):
             i+=1
             if i%2000==0:
-                print i
+                print(i)
             p1_ind = int(p1[1:])
             p2_ind = int(p2[1:])
             p1_sen = question_df.iloc[p1_ind][space].split()
@@ -606,7 +608,7 @@ class Feature(object):
             try:
                 res = np.array([f(p1_sen,p2_sen) for f in fea_func_list])
             except:
-                print p1,p1_sen,p2,p2_sen
+                print(p1,p1_sen,p2,p2_sen)
                 exit(0)
             df.append(res)
         columns = [f.__name__+ "_"+ space for f in fea_func_list]
@@ -671,7 +673,7 @@ def generate_senten_embed_comparion_features(dataset):
 
     for i,sepath in enumerate(sentence_embeddings):
 
-        print i,"doing", dataset, sepath
+        print(i,"doing", dataset, sepath)
 
         fea_func_list = feature_list1_for_nottfidf
         fea_name_prefix = sepath.split(".")[0]
@@ -789,7 +791,7 @@ def gen_and_store_intermediate_resutls_words():
     inters = "../../inters/embeddings"
     for space in spaces:
         n = 3 if space=="words" else 5
-        print "loading...."
+        print("loading....")
         words_3gram_vectorizer = DataSet.load_inters(os.path.join(inters,"words_3gram_vectorizer.pkl"))
         ques_tfidf_embedding_array = DataSet.load_inters(os.path.join(inters,"words_3gram_sentence_tfidf_embedding.npz"))
 
@@ -803,7 +805,7 @@ def gen_and_store_intermediate_resutls_words():
                                                                                                   words_3gram_vectorizer.vocabulary_,
                                                                                                   ques_tfidf_embedding_array,
                                                                                                   mode)
-                print i, mode
+                print(i, mode)
 
                 name = "glove_word_embed_to_sentence_embed"
                 np.save(name+"_mode_"+mode,question_emb_from_word_embed)
@@ -814,7 +816,7 @@ def gen_and_store_intermediate_resutls_chars():
     inters = "../../inters/embeddings"
     for space in spaces:
         n = 3 if space=="words" else 5
-        print "loading...."
+        print("loading....")
         chars_5gram_vectorizer = DataSet.load_inters(os.path.join(inters,"chars_5gram_vectorizer.pkl"))
         ques_tfidf_embedding_array = DataSet.load_inters(os.path.join(inters,"chars_5gram_sentence_tfidf_embedding.npz"))
 
@@ -828,7 +830,7 @@ def gen_and_store_intermediate_resutls_chars():
                                                                                                   chars_5gram_vectorizer.vocabulary_,
                                                                                                   ques_tfidf_embedding_array,
                                                                                                   mode)
-                print i, mode
+                print(i, mode)
 
                 name = "glove_char_embed_to_sentence_embed"
                 np.save(name+"_mode_"+mode,question_emb_from_word_embed)

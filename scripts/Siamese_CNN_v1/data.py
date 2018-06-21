@@ -7,13 +7,14 @@ sys.path.append("../")
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
+import torch
 from feature_engineering.util import DataSet
 _PAD_ = "_PAD_"
 class GreedyBucket(object):
     def fit(self,list_pair_len):
-        self.list_pair_len_max = map(max, list_pair_len)
-        max_and_pair_list = zip(self.list_pair_len_max,list_pair_len)
-        max_cost_list = map(lambda x:(x[0],2*x[0]-x[1][0]-x[1][1]),max_and_pair_list)
+        self.list_pair_len_max = list(map(max, list_pair_len))
+        max_and_pair_list = list(zip(self.list_pair_len_max,list_pair_len))
+        max_cost_list = list(map(lambda x:(x[0],2*x[0]-x[1][0]-x[1][1]),max_and_pair_list))
         max_accumu = {}
         for max_,cost_ in max_cost_list:
             tmp_cost_num = max_accumu.setdefault(max_,[0,0])
@@ -67,11 +68,10 @@ class GreedyBucket(object):
                 if new_total < total_cost:
                     total_cost = new_total
                     prefer_index = i
-            
             num_splits -= 1
             next_len_1 = prefer_index
             next_len_2 = len(sort_max_cost_list)-1-next_len_1-1
-            bigger = sys.maxint
+            bigger = sys.maxsize
             for i in range(num_splits+1):
                 split1 = i
                 split2 = num_splits-i
@@ -102,8 +102,8 @@ class GreedyBucket(object):
 class PaddedTensorDataset(Dataset):
     def __init__(self, data_tensor, target_tensor):
         assert len(data_tensor)==len(target_tensor)
-        self.data_tensor = data_tensor
-        self.target_tensor = target_tensor
+        self.data_tensor = torch.LongTensor(data_tensor)
+        self.target_tensor = torch.LongTensor(target_tensor)
 
     def __getitem__(self, index):
         return self.data_tensor[index], self.target_tensor[index]
@@ -121,9 +121,9 @@ class MyDataLoader(object):
         assert self.data_space in ["words","chars"]
         self.pad_prefix = pad_prefix
         self.shuffle = shuffle
-        print "preprocessing..."
+        print("preprocessing...")
         self._preprocess()
-        print "finish."
+        print("finish.")
 
     @property
     def _temp_file(self):
@@ -134,32 +134,31 @@ class MyDataLoader(object):
 
     def _preprocess(self):
         if os.path.exists(self._temp_file):
-            print "detect cached intermediate files...loading..."
+            print("detect cached intermediate files...loading...")
             all_cached = pickle.load(open(self._temp_file,"rb"))
             self.item2idx = all_cached["item2idx"]
             self.idx2item = all_cached["idx2item"]
             self.buckets = all_cached["buckets"]
             self.bounds = all_cached["bounds"]
             self.bucket_idx_vectors = all_cached["bucket_idx_vectors"]
-            print "finish"
         else:
             self._generate_inter_files()
 
     def _generate_inter_files(self):
-        print "loading question_df..."
+        print("loading question_df...")
         question_df = DataSet.load_all_questions()
         corpus = question_df[self.data_space]
-        print "generating item2idx..."
-        sen_list = map(lambda x:x.split(),corpus.values.tolist())
+        print("generating item2idx...")
+        sen_list = corpus.values.tolist()
         self.item2idx = {_PAD_:0}
         for sen in sen_list:
-            for word in sen:
+            for word in sen.split():
                 if word not in self.item2idx:
                     self.item2idx[word] = len(self.item2idx)
-        print "generating idx2item..."
+        print("generating idx2item...")
         self.idx2item = {v:k for k,v in self.item2idx.items()}
 
-        print "load %s data..."%(self.train_test)
+        print("load %s data..."%(self.train_test))
         if self.train_test=="train":
             self.data_set = DataSet.load_train()
         else:
@@ -172,15 +171,15 @@ class MyDataLoader(object):
             q1 = self.data_set["char_len_q1"]
             q2 = self.data_set["char_len_q2"]
 
-        print "bucketing..."
-        q_pair = zip(q1,q2)
+        print("bucketing...")
+        q_pair = list(zip(q1,q2))
         bucket = GreedyBucket()
         fit_res = bucket.fit(q_pair)
         self.buckets,self.bounds = bucket.get_split_results(fit_res,self.bucket_num)
-
-        print "generating id vectors..."
+        #print("len of self.bounds",len(self.bounds))
+        print("generating id vectors...")
         data_set_id_vectors = []
-        for ind in xrange(self.data_set.shape[0]):
+        for ind in range(self.data_set.shape[0]):
             cur_row = self.data_set.iloc[ind]
             cur_q1 = cur_row["q1"]
             cur_q1_items = question_df.loc[cur_q1][self.data_space].split()
@@ -204,7 +203,7 @@ class MyDataLoader(object):
             data_set_id_vectors.append(cur_pair_padded)
         data_set_id_vectors = np.array(data_set_id_vectors)
 
-        print "generating bucket_idx_vectors..."
+        print("generating bucket_idx_vectors...")
         self.bucket_idx_vectors = {}
         for b,id_list in self.buckets.items():
             tmp = {}
@@ -215,8 +214,8 @@ class MyDataLoader(object):
             tmp["data"] = tmpdata
             self.bucket_idx_vectors[b] = tmp
 
-        print "finish generating inter files."
-        print "begin caching.."
+        print("finish generating inter files.")
+        print("begin caching..")
         all_cached = {}
         all_cached["item2idx"] =  self.item2idx
         all_cached["idx2item"] =  self.idx2item
@@ -228,10 +227,10 @@ class MyDataLoader(object):
         except:
             pass
         pickle.dump(all_cached,open(self._temp_file,"wb"))
-        print "finish caching"
+        print("finish caching")
 
     def get_data_iterator(self):
-        bucketkeys = self.buckets.keys()
+        bucketkeys = list(self.buckets.keys())
         np.random.shuffle(bucketkeys)
         for b in bucketkeys:
             tmp = self.bucket_idx_vectors[b]
@@ -268,5 +267,5 @@ if __name__ == "__main__":
     dl = MyDataLoader(bucket_num=5,batch_size=2,train_test="train",data_space="words")
     dit = dl.get_data_iterator()
     for d,y in dit:
-        print d
-        print y
+        print(d)
+        print(y)
