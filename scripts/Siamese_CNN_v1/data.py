@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 import sys
+import os
+import pickle
+import hashlib
 sys.path.append("../")
 import numpy as np
 import pandas as pd
@@ -122,7 +125,27 @@ class MyDataLoader(object):
         self._preprocess()
         print "finish."
 
+    @property
+    def _temp_file(self):
+        combine_str = "%s_%s_%s_%s"%(self.train_test,self.data_space,self.bucket_num,self.pad_prefix)
+        hash_object = hashlib.md5(combine_str.encode("utf-8"))
+        hexcode = hash_object.hexdigest()
+        return "./temp/%s_%s.pkl"%(combine_str,hexcode)
+
     def _preprocess(self):
+        if os.path.exists(self._temp_file):
+            print "detect cached intermediate files...loading..."
+            all_cached = pickle.load(open(self._temp_file,"rb"))
+            self.item2idx = all_cached["item2idx"]
+            self.idx2item = all_cached["idx2item"]
+            self.buckets = all_cached["buckets"]
+            self.bounds = all_cached["bounds"]
+            self.bucket_idx_vectors = all_cached["bucket_idx_vectors"]
+            print "finish"
+        else:
+            self._generate_inter_files()
+
+    def _generate_inter_files(self):
         print "loading question_df..."
         question_df = DataSet.load_all_questions()
         corpus = question_df[self.data_space]
@@ -154,8 +177,9 @@ class MyDataLoader(object):
         bucket = GreedyBucket()
         fit_res = bucket.fit(q_pair)
         self.buckets,self.bounds = bucket.get_split_results(fit_res,self.bucket_num)
-        data_set_id_vectors = []
+
         print "generating id vectors..."
+        data_set_id_vectors = []
         for ind in xrange(self.data_set.shape[0]):
             cur_row = self.data_set.iloc[ind]
             cur_q1 = cur_row["q1"]
@@ -180,10 +204,9 @@ class MyDataLoader(object):
             data_set_id_vectors.append(cur_pair_padded)
         data_set_id_vectors = np.array(data_set_id_vectors)
 
-        print "generating data_set_id_vectors..."
+        print "generating bucket_idx_vectors..."
         self.bucket_idx_vectors = {}
         for b,id_list in self.buckets.items():
-            #print b
             tmp = {}
             if self.train_test == "train":
                 tmplabels = self.data_set["label"].iloc[id_list].values
@@ -191,6 +214,21 @@ class MyDataLoader(object):
             tmpdata = np.array(data_set_id_vectors[id_list].tolist())
             tmp["data"] = tmpdata
             self.bucket_idx_vectors[b] = tmp
+
+        print "finish generating inter files."
+        print "begin caching.."
+        all_cached = {}
+        all_cached["item2idx"] =  self.item2idx
+        all_cached["idx2item"] =  self.idx2item
+        all_cached["buckets"]  =  self.buckets
+        all_cached["bounds"]   =  self.bounds
+        all_cached["bucket_idx_vectors"] = self.bucket_idx_vectors
+        try:
+            os.makedirs("./temp")
+        except:
+            pass
+        pickle.dump(all_cached,open(self._temp_file,"wb"))
+        print "finish caching"
 
     def get_data_iterator(self):
         bucketkeys = self.buckets.keys()
