@@ -6,12 +6,12 @@ import hashlib
 sys.path.append("../")
 import numpy as np
 import pandas as pd
-from torch.utils.data import Dataset, DataLoader, TensorDataset
 import torch
 try:
     import cPickle as pickle
 except:
     import pickle
+from torch.utils.data import Dataset, DataLoader, TensorDataset
 from past.builtins import xrange
 from feature_engineering.util import DataSet
 _PAD_ = "_PAD_"
@@ -146,22 +146,34 @@ class PaddedTensorDatasetNoTest(Dataset):
 
 
 class DataGenerator(object):
-    def __init__(self,name):
-        self.generator_name = name
+    item2idx = None
+    idx2item = None
+    item_embed = None
+    q2idvec = None
+    def __init__(self,data_df,space,bucket_num,batch_size,is_prefix_pad,is_shuffle,is_test):
+        assert space in ["words","chars"]
+        self.data_df = data_df
+        self.space = space
+        self.bucket_num = bucket_num
+        self.batch_size = batch_size
+        self.is_prefix_pad = is_prefix_pad
+        self.is_shuffle = is_shuffle
+        self.is_test = is_test
         if os.path.exists(self._temp_file):
             print("detect cached intermediate files...loading...")
-            all_cached = pickle.load(open(self._temp_file,"rb"))
-            self.item2idx = all_cached["item2idx"]
-            self.idx2item = all_cached["idx2item"]
-            self.item_embed = all_cached["item_embed"]
-            self.q2idvec = all_cached["q2idvec"]
+            if DataGenerator.item2idx is None:
+                all_cached = pickle.load(open(self._temp_file,"rb"))
+                DataGenerator.item2idx = all_cached["item2idx"]
+                DataGenerator.idx2item = all_cached["idx2item"]
+                DataGenerator.item_embed = all_cached["item_embed"]
+                DataGenerator.q2idvec = all_cached["q2idvec"]
             print("finish")
         else:
             print("Generating intermediate files...")
-            self.item2idx = {}
-            self.idx2item = {}
-            self.item_embed = {}
-            self.q2idvec = {}
+            DataGenerator.item2idx = {}
+            DataGenerator.idx2item = {}
+            DataGenerator.item_embed = {}
+            DataGenerator.q2idvec = {}
             spaces = ["words","chars"]
             question_df = DataSet.load_all_questions()
             all_qids = DataSet.load_all_unique_ids_train_test()
@@ -169,8 +181,8 @@ class DataGenerator(object):
                 print("for",space)
                 corpus = question_df[space]
                 w2i,i2w = self._get_item2id_id2item(corpus)
-                self.item2idx[space] = w2i
-                self.idx2item[space] = i2w
+                DataGenerator.item2idx[space] = w2i
+                DataGenerator.idx2item[space] = i2w
                 ##Finish mapping table
                 term_embed = DataSet.load_term_embed(space)
                 embed_size = term_embed.shape[1]
@@ -179,22 +191,22 @@ class DataGenerator(object):
                 all_index = [_PAD_] + term_embed.index.values.tolist()
                 all_embeding_df = pd.DataFrame(data=all_embeding, index=all_index)
                 sort_word = [i2w[i] for i in range(len(i2w))]
-                self.item_embed[space] = all_embeding_df.loc[sort_word].values
+                DataGenerator.item_embed[space] = all_embeding_df.loc[sort_word].values
                 ##Finish item embedding
                 tmp_q2idvec = {}
                 for qid in all_qids:
                     items = question_df.loc[qid][space].split()
                     idvec = np.array([w2i[w] for w in items])
                     tmp_q2idvec[qid] = idvec
-                self.q2idvec[space]=tmp_q2idvec
+                    DataGenerator.q2idvec[space]=tmp_q2idvec
                 ##Finish map from question to id vector
             print("finish generating inter files.")
             print("begin caching..")
             all_cached = {}
-            all_cached["item2idx"] =  self.item2idx
-            all_cached["idx2item"] =  self.idx2item
-            all_cached["item_embed"] = self.item_embed
-            all_cached["q2idvec"] = self.q2idvec
+            all_cached["item2idx"] =  DataGenerator.item2idx
+            all_cached["idx2item"] =  DataGenerator.idx2item
+            all_cached["item_embed"] = DataGenerator.item_embed
+            all_cached["q2idvec"] = DataGenerator.q2idvec
             try:
                 os.makedirs("./temp")
             except:
@@ -202,26 +214,23 @@ class DataGenerator(object):
             pickle.dump(all_cached,open(self._temp_file,"wb"))
             print("finish caching")
 
-    def prepare(self,data_df,bucket_num,space,is_prefix_pad,is_test):
+    def prepare(self):
         print("prepare necessary data...")
-        assert space in ["words","chars"]
-        self.is_test = is_test
-        self.data_df = data_df
-        q_len_title = ["%s_len_q%s"%(space[:-1],i) for i in [1,2]]
-        q_pair_list = list(zip(data_df[q_len_title[0]],
-                               data_df[q_len_title[1]]
+        q_len_title = ["%s_len_q%s"%(self.space[:-1],i) for i in [1,2]]
+        q_pair_list = list(zip(self.data_df[q_len_title[0]],
+                               self.data_df[q_len_title[1]]
                                )
                            )
         bucket = GreedyBucket()
         fit_res = bucket.fit(q_pair_list)
-        buckets,bounds = bucket.get_split_results(fit_res,bucket_num)
+        buckets,bounds = bucket.get_split_results(fit_res,self.bucket_num)
         self.buckets= buckets
         self.bounds = bounds
         data_set_id_vectors = []
-        q2idvs = self.q2idvec[space]
+        q2idvs = DataGenerator.q2idvec[self.space]
         print(len(self.data_df))
         for ind in xrange(len(self.data_df)):
-            cur_row = data_df.iloc[ind]
+            cur_row = self.data_df.iloc[ind]
             cur_q1 = cur_row["q1"]
             cur_q2 = cur_row["q2"]
             q1_idv = q2idvs[cur_q1]
@@ -229,7 +238,7 @@ class DataGenerator(object):
             cur_bound = bounds[ind]
             q1_pad_len = cur_bound - len(q1_idv)
             q2_pad_len = cur_bound - len(q2_idv)
-            if is_prefix_pad:
+            if self.is_prefix_pad:
                 cur_q1_padded = np.pad(q1_idv,(q1_pad_len,0),"constant")
                 cur_q2_padded = np.pad(q2_idv,(q2_pad_len,0),"constant")
             else:
@@ -240,9 +249,9 @@ class DataGenerator(object):
         self.data_set_id_vectors = np.array(data_set_id_vectors)
         print("prepare done.")
 
-    def get_data_generator(self,is_shuffle,batch_size):
+    def get_data_generator(self):
         bucketkeys = list(self.buckets.keys())
-        if is_shuffle:
+        if self.is_shuffle:
             np.random.shuffle(bucketkeys)
         else:
             bucketkeys.sort() ##if not shuffle, always starts with the bucket with smallest length
@@ -250,25 +259,25 @@ class DataGenerator(object):
             id_list = self.buckets[b]
             tmpdata = np.vstack(self.data_set_id_vectors[id_list])
             if not self.is_test:
-                tmplabel = self.data_df["label"].iloc[id_list].values
+                tmplabel = self.data_df["label"].iloc[id_list].values.reshape(-1,1)
             tmpids = np.array(id_list)
             tmpsels = np.arange(len(tmpids))
-            if is_shuffle:
+            if self.is_shuffle:
                 np.random.shuffle(tmpsels)
-            if len(tmpids)%batch_size == 0:
-                nums = len(tmpids)/batch_size
+            if len(tmpids)%self.batch_size == 0:
+                nums = len(tmpids)/self.batch_size
             else:
-                nums = len(tmpids)/batch_size + 1
+                nums = len(tmpids)/self.batch_size + 1
             for time in xrange(nums):
-                start = time*batch_size
-                end = (time+1)*batch_size
+                start = time*self.batch_size
+                end = (time+1)*self.batch_size
                 sel = tmpsels[start:end].tolist()
                 if not self.is_test:
-                    yield torch.LongTensor(tmpdata[sel]),torch.LongTensor(tmpids[sel]),torch.LongTensor(tmplabel[sel])
+                    yield torch.LongTensor(tmpdata[sel]),torch.LongTensor(tmpids[sel]),torch.Tensor(tmplabel[sel])
                     #yield tmpdata[sel],tmplabel[sel],tmpids[sel]
                 else:
-                    yield torch.LongTensor(tmpdata[sel]), torch.LongTensor(tmpids[sel])
-                    #yield tmpdata[sel], tmpids[sel]
+                    yield torch.LongTensor(tmpdata[sel]), torch.LongTensor(tmpids[sel]),torch.LongTensor(np.ones((len(sel),1)))
+                    #yield tmpdata[sel], tmpids[sel], dummy labels
 
     def _get_item2id_id2item(self,corpus):
         item2idx = {_PAD_:0}
@@ -288,7 +297,10 @@ class DataGenerator(object):
         return "./temp/%s_%s.pkl"%(combine_str,hexcode)
 
     def get_item_embed_tensor(self,space):
-        return torch.Tensor(self.item_embed[space])
+        return torch.Tensor(DataGenerator.item_embed[space])
+
+    def __len__(self):
+        return self.data_df.shape[0]
 
 
 
