@@ -8,7 +8,11 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 import torch
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except:
+    import pickle
+from past.builtins import xrange
 from feature_engineering.util import DataSet
 _PAD_ = "_PAD_"
 class GreedyBucket(object):
@@ -142,7 +146,8 @@ class PaddedTensorDatasetNoTest(Dataset):
 
 
 class DataGenerator(object):
-    def __init__(self):
+    def __init__(self,name):
+        self.generator_name = name
         if os.path.exists(self._temp_file):
             print("detect cached intermediate files...loading...")
             all_cached = pickle.load(open(self._temp_file,"rb"))
