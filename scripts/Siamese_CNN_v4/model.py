@@ -21,6 +21,7 @@ class Siamese_CNN(nn.Module):
         super(Siamese_CNN,self).__init__()
         self.nn_Embedding = nn.Embedding.from_pretrained(pre_trained_embedding,freeze=is_freeze)
         input_channel_len = pre_trained_embedding.size(1)
+        self.dropout = nn.Dropout(p=0.4) ###
         self.conv1d_size2 = nn.Conv1d(in_channels=input_channel_len,
                                       out_channels=100,
                                       kernel_size=2,
@@ -45,25 +46,25 @@ class Siamese_CNN(nn.Module):
         q1_embed = self.nn_Embedding(q1).transpose(1,2) ##NxLxC -> NxCxL
         q2_embed = self.nn_Embedding(q2).transpose(1,2)
 
-        q1_conv1 = F.relu(self.conv1d_size2(q1_embed)) ##NxCxL
+        q1_conv1 = self.dropout(F.relu(self.conv1d_size2(q1_embed)))##NxCxL
         q1_pool1,_ = q1_conv1.max(dim=2) ##NxC
-        q1_conv2 = F.relu(self.conv1d_size3(q1_embed)) ##NxCxL
+        q1_conv2 = self.dropout(F.relu(self.conv1d_size3(q1_embed))) ##NxCxL
         q1_pool2,_ = q1_conv2.max(dim=2) ##NxC
-        q1_conv3 = F.relu(self.conv1d_size4(q1_embed)) ##NxCxL
+        q1_conv3 = self.dropout(F.relu(self.conv1d_size4(q1_embed))) ##NxCxL
         q1_pool3,_ = q1_conv3.max(dim=2) ##NxC(100)
         q1_concat = torch.cat((q1_pool1,q1_pool2,q1_pool3),dim=1) ## Nx(c1+c2...)[300]
 
-        q2_conv1 = F.relu(self.conv1d_size2(q2_embed)) ##NxCxL
+        q2_conv1 = self.dropout(F.relu(self.conv1d_size2(q2_embed))) ##NxCxL
         q2_pool1,_ = q2_conv1.max(dim=2) ##NxC
-        q2_conv2 = F.relu(self.conv1d_size3(q2_embed)) ##NxCxL
+        q2_conv2 = self.dropout(F.relu(self.conv1d_size3(q2_embed))) ##NxCxL
         q2_pool2,_ = q2_conv2.max(dim=2) ##NxC
-        q2_conv3 = F.relu(self.conv1d_size4(q2_embed)) ##NxCxL
+        q2_conv3 = self.dropout(F.relu(self.conv1d_size4(q2_embed))) ##NxCxL
         q2_pool3,_ = q2_conv3.max(dim=2) ##NxC(100)
         q2_concat = torch.cat((q2_pool1,q2_pool2,q2_pool3),dim=1) ## Nx(c1+c2...)[300]
 
         q_concat = torch.cat((q1_concat,q2_concat),dim=1) ##Nx600
-        h1 = F.relu(self.out_hidden1(q_concat))
-        h2 = F.relu(self.out_hidden2(h1))
+        h1 = self.dropout(F.relu(self.out_hidden1(q_concat)))
+        h2 = self.dropout(F.relu(self.out_hidden2(h1)))
         outscore = self.out_put(h2)
         return outscore
 
@@ -96,9 +97,11 @@ class Model(object):
                 running_corrects = 0
 
                 # Iterate over data.
+                sample_num = 0
                 data_loader = train_dg.get_data_generator() if phase=="train" else valid_dg.get_data_generator()
                 for inputs, ids, labels in data_loader: ##inputs and labels are dim 2 and ids are dim 1
                     #print("batch size:",inputs.size())
+                    sample_num += len(inputs)
                     inputs = inputs.to(self.device)
                     labels = labels.to(self.device)
 
@@ -127,8 +130,8 @@ class Model(object):
                 epoch_loss = running_loss / dataset_sizes[phase] ##average loss
                 epoch_acc = running_corrects.double().item() / dataset_sizes[phase]
 
-                print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                    phase, epoch_loss, epoch_acc))
+                print('{} Loss: {:.4f} Acc: {:.4f} Num: {}'.format(
+                    phase, epoch_loss, epoch_acc,sample_num))
 
                 # deep copy the model
                 if phase == 'val' and epoch_loss < best_loss:
@@ -181,10 +184,10 @@ def train():
     ### Initialize model using network
     siamese_model = Model(siamese_cnn)
     criteria = nn.BCEWithLogitsLoss()
-    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_cnn.parameters()), lr=8e-4)
-    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.9)
+    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_cnn.parameters()), lr=9e-4) ##TODO 0.0008->0.0009
+    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.98)##TODO 0.95->0.98
     ### Train
-    siamese_model.train(train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,25)
+    siamese_model.train(train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,100) ##TODO 50->100
     preds = siamese_model.predict(test_dg).numpy()
     preds = pd.DataFrame({"y_pre":preds})
     preds.to_csv("submission.csv",index=False)
