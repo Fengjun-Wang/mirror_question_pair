@@ -15,58 +15,78 @@ from torch import nn as nn, autograd
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 from data import DataGenerator
+import matplotlib.pyplot as plt
 
-class Siamese_CNN(nn.Module):
-    def __init__(self,pre_trained_embedding,is_freeze):
-        super(Siamese_CNN,self).__init__()
-        self.nn_Embedding = nn.Embedding.from_pretrained(pre_trained_embedding,freeze=is_freeze)
-        input_channel_len = pre_trained_embedding.size(1)
-        self.dropout = nn.Dropout(p=0.4) ###TODO 0.4->0.5->0.4
-        self.conv1d_size3 = nn.Conv1d(in_channels=input_channel_len, ##TODO 2,3,4->3,4,5->3,5,7->3,4,6
-                                      out_channels=100,
-                                      kernel_size=3,
-                                      stride=1,
-                                      padding=1)
-        self.conv1d_size4 = nn.Conv1d(in_channels=input_channel_len,
-                                      out_channels=100,
-                                      kernel_size=4,
-                                      stride=1,
-                                      padding=1)
-        self.conv1d_size5 = nn.Conv1d(in_channels=input_channel_len,
-                                      out_channels=100,
-                                      kernel_size=6,
-                                      stride=1,
-                                      padding=2) ##TODO 1->2 because of kernel_size is 7 and we need to guarantee the length of sentence is sufficient for convolution
-        self.out_hidden1 = nn.Linear(600,300)
-        self.out_hidden2 = nn.Linear(300,150)
-        self.out_put = nn.Linear(150,1)
+class Siamese_LSTM(nn.Module):
+    def __init__(self,
+                 pre_trained_embedding,
+                 is_freeze,
+                 hidden_size,
+                 number_layers,
+                 lstm_dropout_p,
+                 bidirectional,
+                 linear_hid_size,
+                 linear_hid_drop_p,
+                 input_drop_p):
+        super(Siamese_LSTM,self).__init__()
+        self.input_channel_len = pre_trained_embedding.size(1)
+        self.is_freeze = is_freeze
+        self.hidden_size = hidden_size
+        self.number_layers = number_layers
+        self.lstm_dropout_p = lstm_dropout_p
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if self.bidirectional else 1
+        self.linear_hid_size = linear_hid_size
+        self.linear_hid_drop_p = linear_hid_drop_p
+        self.input_drop_p = input_drop_p
+        ## Init layers
+        self.nn_Embedding = nn.Embedding.from_pretrained(pre_trained_embedding,freeze=self.is_freeze)
+        self.lstm = nn.LSTM(input_size=self.input_channel_len,
+                            hidden_size=self.hidden_size,
+                            num_layers=self.number_layers,
+                            batch_first=True,
+                            dropout=self.lstm_dropout_p,
+                            bidirectional=self.bidirectional)
+        self.linear1 = nn.Linear(2*self.num_directions*hidden_size,self.linear_hid_size) ##out dim of q1 is 2*hidden(concat two hiddens), same for q2
+        self.linear1_dropout = nn.Dropout(p=self.linear_hid_drop_p)
+        self.linear2 = nn.Linear(self.linear_hid_size,1)
+        self.input_dropout = nn.Dropout(p=self.input_drop_p)
+
+    def init_hidden(self,batch_size):
+        self.hidden = ( torch.zeros(self.number_layers*self.num_directions, batch_size, self.hidden_size),
+                        torch.zeros(self.number_layers*self.num_directions, batch_size, self.hidden_size))
+
 
     def forward(self, input):
         q1,q2  = torch.chunk(input, 2, dim=1) ## Split the question pairs
-        q1_embed = self.nn_Embedding(q1).transpose(1,2) ##NxLxC -> NxCxL
-        q2_embed = self.nn_Embedding(q2).transpose(1,2)
+        q1_embed = self.nn_Embedding(q1) ##NxLxC
+        q2_embed = self.nn_Embedding(q2) ##NxLxC
+        #batch_size = input.size(0)
 
-        q1_conv1 = self.dropout(F.relu(self.conv1d_size3(q1_embed)))##NxCxL
-        q1_pool1,_ = q1_conv1.max(dim=2) ##NxC
-        q1_conv2 = self.dropout(F.relu(self.conv1d_size4(q1_embed))) ##NxCxL
-        q1_pool2,_ = q1_conv2.max(dim=2) ##NxC
-        q1_conv3 = self.dropout(F.relu(self.conv1d_size5(q1_embed))) ##NxCxL
-        q1_pool3,_ = q1_conv3.max(dim=2) ##NxC(100)
-        q1_concat = torch.cat((q1_pool1,q1_pool2,q1_pool3),dim=1) ## Nx(c1+c2...)[300]
+        #self.init_hidden(batch_size) ##Initialize h0 and c0
+        q1_embed = self.input_dropout(q1_embed)
+        q2_embed = self.input_dropout(q2_embed)
+        q1_out,q1_hidden = self.lstm(q1_embed)
+        q1h,q1c = q1_hidden
+        #self.init_hidden(batch_size)
+        q2_out,q2_hidden = self.lstm(q2_embed)
+        q2h,q2c = q2_hidden
 
-        q2_conv1 = self.dropout(F.relu(self.conv1d_size3(q2_embed))) ##NxCxL
-        q2_pool1,_ = q2_conv1.max(dim=2) ##NxC
-        q2_conv2 = self.dropout(F.relu(self.conv1d_size4(q2_embed))) ##NxCxL
-        q2_pool2,_ = q2_conv2.max(dim=2) ##NxC
-        q2_conv3 = self.dropout(F.relu(self.conv1d_size5(q2_embed))) ##NxCxL
-        q2_pool3,_ = q2_conv3.max(dim=2) ##NxC(100)
-        q2_concat = torch.cat((q2_pool1,q2_pool2,q2_pool3),dim=1) ## Nx(c1+c2...)[300]
+        if self.bidirectional:
+            q1_embed = torch.cat((q1h[-2],q1h[-1]),dim=1)
+            q2_embed = torch.cat((q2h[-2],q2h[-1]),dim=1)
+        else:
+            q1_embed = q1h[-1]
+            q2_embed = q2h[-1]
 
-        q_concat = torch.cat((q1_concat,q2_concat),dim=1) ##Nx600
-        h1 = self.dropout(F.relu(self.out_hidden1(q_concat)))
-        h2 = self.dropout(F.relu(self.out_hidden2(h1)))
-        outscore = self.out_put(h2)
-        return outscore
+        q_pair_embed = torch.cat((q1_embed,q2_embed),dim=1)
+        h1 = self.linear1_dropout(F.relu(self.linear1(q_pair_embed)))
+        out = self.linear2(h1)
+        return out
+
+
+
+
 
 class Model(object):
     def __init__(self,model):
@@ -74,13 +94,17 @@ class Model(object):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
 
-    def train(self,train_dg,valid_dg,criterion, optimizer, scheduler, num_epochs):
+    def train(self,name,train_dg,valid_dg,criterion, optimizer, scheduler, num_epochs):
         since = time.time()
         criterion = criterion.to(self.device)
         dataset_sizes = {"train":len(train_dg),"val":len(valid_dg)}
         best_model_wts = copy.deepcopy(self.model.state_dict())
         best_acc = 0.0
         best_loss = sys.maxsize
+        train_loss = []
+        train_acc = []
+        val_loss = []
+        val_acc = []
         for epoch in range(num_epochs):
             print('Epoch {}/{}'.format(epoch, num_epochs - 1))
             print('-' * 10)
@@ -133,6 +157,14 @@ class Model(object):
                 print('{} Loss: {:.4f} Acc: {:.4f} Num: {}'.format(
                     phase, epoch_loss, epoch_acc,sample_num))
 
+                ##Record the train and validation loss and accuracy for analysis
+                if phase=="train":
+                    train_loss.append(epoch_loss)
+                    train_acc.append(epoch_acc)
+                else:
+                    val_loss.append(epoch_loss)
+                    val_acc.append(epoch_acc)
+
                 # deep copy the model
                 if phase == 'val' and epoch_loss < best_loss:
                     best_loss = epoch_loss
@@ -150,6 +182,19 @@ class Model(object):
         # load best model weights
         self.model.load_state_dict(best_model_wts)
         torch.save(self.model.state_dict(),"siamese_CNN_best_pars.pth")
+
+        plt.figure(figsize=(20, 8))
+        l1, = plt.plot(train_loss, "r-")
+        l2, = plt.plot(val_loss, "g-")
+        plt.legend([l1, l2], ["train_loss", "valid_loss"])
+        plt.grid()
+        plt.savefig(name+"_loss_trend.jpg")
+        plt.figure(figsize=(20, 8))
+        l1, = plt.plot(train_acc, "r-")
+        l2, = plt.plot(val_acc, "g-")
+        plt.legend([l1, l2], ["train_acc", "valid_acc"])
+        plt.grid()
+        plt.savefig(name+"_acc_trend.jpg")
         return self.model
 
     def predict(self,data_dg):
@@ -165,14 +210,24 @@ class Model(object):
 
 
 def train():
-    space = "chars" ##TODO words->chars
+    space = "words"
+    is_freeze = True
+    hidden_size = 100
+    num_layers = 2
+    lstm_dropput_p = 0.6 ##TODO 0.4->0.5->0.6
+    lstm_input_dropout = 0.6
+    bidirectional = True
+    linear_hidden_size = 200
+    linear_hid_drop_p = 0.3
+    train_name = "v0.2"
+
     train_df = DataSet.load_train()
     xtr_df, xval_df = train_test_split(train_df, test_size=0.25)
     test_df = DataSet.load_test()
     ### Generate data generator
-    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=5000,is_prefix_pad=True,is_shuffle=True,is_test=False)
-    val_dg = DataGenerator(data_df=xval_df,space=space,bucket_num=5,batch_size=5000,is_prefix_pad=True,is_shuffle=False,is_test=False)
-    test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=5000,is_prefix_pad=True,is_shuffle=False,is_test=True)
+    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=True,is_test=False)
+    val_dg = DataGenerator(data_df=xval_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=False,is_test=False)
+    test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=False,is_test=True)
     ### Must do prepare before using
     train_dg.prepare()
     val_dg.prepare()
@@ -180,14 +235,23 @@ def train():
     ### load word embedding, can use train_df, val_dg or test_dg
     item_embed = train_dg.get_item_embed_tensor(space)
     ### Initialize network
-    siamese_cnn = Siamese_CNN(item_embed,is_freeze=True)
+    siamese_lstm = Siamese_LSTM(pre_trained_embedding=item_embed,
+                               is_freeze=is_freeze,
+                               hidden_size=hidden_size,
+                               number_layers=num_layers,
+                               lstm_dropout_p=lstm_dropput_p,
+                               bidirectional=bidirectional,
+                               linear_hid_size=linear_hidden_size,
+                               linear_hid_drop_p=linear_hid_drop_p,
+                               input_drop_p = lstm_input_dropout)
+
     ### Initialize model using network
-    siamese_model = Model(siamese_cnn)
+    siamese_model = Model(siamese_lstm)
     criteria = nn.BCEWithLogitsLoss()
-    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_cnn.parameters()), lr=9e-4)
-    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.98)
+    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=0.001) ##TODO 0.001
+    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.99)##TODO 0.99
     ### Train
-    siamese_model.train(train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,100)
+    siamese_model.train(train_name,train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,150) ##TODO 150
     preds = siamese_model.predict(test_dg).numpy()
     preds = pd.DataFrame({"y_pre":preds})
     preds.to_csv("submission.csv",index=False)

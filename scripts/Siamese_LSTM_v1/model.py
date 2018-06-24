@@ -15,34 +15,77 @@ from torch import nn as nn, autograd
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 from data import DataGenerator
-from torch.autograd import Variable
+
+class Siamese_LSTM(nn.Module):
+    def __init__(self,
+                 pre_trained_embedding,
+                 is_freeze,
+                 hidden_size,
+                 number_layers,
+                 lstm_dropout_p,
+                 bidirectional,
+                 linear_hid_size,
+                 linear_hid_drop_p,
+                 input_drop_p):
+        super(Siamese_LSTM,self).__init__()
+        self.input_channel_len = pre_trained_embedding.size(1)
+        self.is_freeze = is_freeze
+        self.hidden_size = hidden_size
+        self.number_layers = number_layers
+        self.lstm_dropout_p = lstm_dropout_p
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if self.bidirectional else 1
+        self.linear_hid_size = linear_hid_size
+        self.linear_hid_drop_p = linear_hid_drop_p
+        self.input_drop_p = input_drop_p
+        ## Init layers
+        self.nn_Embedding = nn.Embedding.from_pretrained(pre_trained_embedding,freeze=self.is_freeze)
+        self.lstm = nn.LSTM(input_size=self.input_channel_len,
+                            hidden_size=self.hidden_size,
+                            num_layers=self.number_layers,
+                            batch_first=True,
+                            dropout=self.lstm_dropout_p,
+                            bidirectional=self.bidirectional)
+        self.linear1 = nn.Linear(2*self.num_directions*hidden_size,self.linear_hid_size) ##out dim of q1 is 2*hidden(concat two hiddens), same for q2
+        self.linear1_dropout = nn.Dropout(p=self.linear_hid_drop_p)
+        self.linear2 = nn.Linear(self.linear_hid_size,1)
+        self.input_dropout = nn.Dropout(p=self.input_drop_p)
+
+    def init_hidden(self,batch_size):
+        self.hidden = ( torch.zeros(self.number_layers*self.num_directions, batch_size, self.hidden_size),
+                        torch.zeros(self.number_layers*self.num_directions, batch_size, self.hidden_size))
 
 
-class Siamese_RNN(nn.Module):
-    def __init__(self,pre_trained_embedding,is_freeze, hidden_dims):
-        super(Siamese_RNN,self).__init__()
-        self.nn_Embedding = nn.Embedding.from_pretrained(pre_trained_embedding,freeze=is_freeze)
-        input_channel_len = pre_trained_embedding.size(1) #300
-        self.dropout = nn.Dropout(p=0.4) ###
-        self.hidden_dims = hidden_dims # hidden cell dimension
-        self.lstm_rnn = nn.LSTM(input_size=input_channel_len, hidden_size=self.hidden_dims, num_layers=1)
+    def forward(self, input):
+        q1,q2  = torch.chunk(input, 2, dim=1) ## Split the question pairs
+        q1_embed = self.nn_Embedding(q1) ##NxLxC
+        q2_embed = self.nn_Embedding(q2) ##NxLxC
+        #batch_size = input.size(0)
 
-    def initialize_hidden_plus_cell(self, batch_size):
-        """ Re-initializes the hidden state, cell state, and the forget gate bias of the network. """
-        zero_hidden = Variable(torch.randn(1, batch_size, self.opt.hidden_dims))
-        zero_cell = Variable(torch.randn(1, batch_size, self.opt.hidden_dims))
-        return zero_hidden, zero_cell
+        #self.init_hidden(batch_size) ##Initialize h0 and c0
+        q1_embed = self.input_dropout(q1_embed)
+        q2_embed = self.input_dropout(q2_embed)
+        q1_out,q1_hidden = self.lstm(q1_embed)
+        q1h,q1c = q1_hidden
+        #self.init_hidden(batch_size)
+        q2_out,q2_hidden = self.lstm(q2_embed)
+        q2h,q2c = q2_hidden
 
-    def forward(self, batch_size, input_data, hidden, cell):
-        """ Performs a forward pass through the network. """
-        q1, q2 = torch.chunk(input, 2, dim=1)  ## Split the question pairs
-        q1_embed = self.nn_Embedding(q1).transpose(1, 2)  ##NxLxC -> NxCxL
-        q2_embed = self.nn_Embedding(q2).transpose(1, 2)
-        output = self.nn_Embedding(input_data).view(1, batch_size, -1)
-        # output = self.nn_Embedding(input_data).view(1, batch_size, -1)
-        for _ in range(self.opt.num_layers):
-            output, (hidden, cell) = self.lstm_rnn(output, (hidden, cell))
-        return output, hidden, cell
+        if self.bidirectional:
+            q1_embed = torch.cat((q1h[-2],q1h[-1]),dim=1)
+            q2_embed = torch.cat((q2h[-2],q2h[-1]),dim=1)
+        else:
+            q1_embed = q1h[-1]
+            q2_embed = q2h[-1]
+
+        q_pair_embed = torch.cat((q1_embed,q2_embed),dim=1)
+        h1 = self.linear1_dropout(F.relu(self.linear1(q_pair_embed)))
+        out = self.linear2(h1)
+        return out
+
+
+
+
 
 class Model(object):
     def __init__(self,model):
@@ -125,7 +168,7 @@ class Model(object):
 
         # load best model weights
         self.model.load_state_dict(best_model_wts)
-        torch.save(self.model.state_dict(),"siamese_RNN_best_pars.pth")
+        torch.save(self.model.state_dict(),"siamese_CNN_best_pars.pth")
         return self.model
 
     def predict(self,data_dg):
@@ -142,36 +185,46 @@ class Model(object):
 
 def train():
     space = "words"
-    train_df = DataSet.load_train()[:10]
+    is_freeze = True
+    hidden_size = 100
+    num_layers = 2
+    lstm_dropput_p = 0.4
+    lstm_input_dropout = 0.6
+    bidirectional = True
+    linear_hidden_size = 200
+    linear_hid_drop_p = 0.3
+
+    train_df = DataSet.load_train()
     xtr_df, xval_df = train_test_split(train_df, test_size=0.25)
-    test_df = DataSet.load_test()[:5]
-
-    # print(train_df)
-    # print(test_df)
-
+    test_df = DataSet.load_test()
     ### Generate data generator
-    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=1,batch_size=5000,is_prefix_pad=True,is_shuffle=True,is_test=False)
-    val_dg = DataGenerator(data_df=xval_df,space=space,bucket_num=1,batch_size=5000,is_prefix_pad=True,is_shuffle=False,is_test=False)
-    test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=1,batch_size=5000,is_prefix_pad=True,is_shuffle=False,is_test=True)
-
+    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=True,is_test=False)
+    val_dg = DataGenerator(data_df=xval_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=False,is_test=False)
+    test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=False,is_test=True)
     ### Must do prepare before using
     train_dg.prepare()
     val_dg.prepare()
     test_dg.prepare()
-
     ### load word embedding, can use train_df, val_dg or test_dg
     item_embed = train_dg.get_item_embed_tensor(space)
-    # print(item_embed)
-
     ### Initialize network
-    siamese_rnn = Siamese_RNN(item_embed,is_freeze=True, hidden_dims=300)
+    siamese_lstm = Siamese_LSTM(pre_trained_embedding=item_embed,
+                               is_freeze=is_freeze,
+                               hidden_size=hidden_size,
+                               number_layers=num_layers,
+                               lstm_dropout_p=lstm_dropput_p,
+                               bidirectional=bidirectional,
+                               linear_hid_size=linear_hidden_size,
+                               linear_hid_drop_p=linear_hid_drop_p,
+                               input_drop_p = lstm_input_dropout)
+
     ### Initialize model using network
-    siamese_model = Model(siamese_rnn)
+    siamese_model = Model(siamese_lstm)
     criteria = nn.BCEWithLogitsLoss()
-    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_rnn.parameters()), lr=9e-4) ##TODO 0.0008->0.0009
-    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.98)##TODO 0.95->0.98
+    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=0.001) ##TODO 0.0009->0.0008->0.001
+    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.99)##TODO 0.98->0.9->0.95->0.99
     ### Train
-    siamese_model.train(train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,100) ##TODO 50->100
+    siamese_model.train(train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,150) ##TODO 150
     preds = siamese_model.predict(test_dg).numpy()
     preds = pd.DataFrame({"y_pre":preds})
     preds.to_csv("submission.csv",index=False)

@@ -127,7 +127,7 @@ class Model(object):
                         loss = criterion(outputs, labels)
                         reg_loss = 0.0
                         for param in self.model.similarity.parameters():
-                            reg_loss += 0.5*0.5*torch.sum(param**2) ##TODO only add regularization to similarity
+                            reg_loss += 0.5*torch.sum(param**2) ##TODO only add regularization to similarity
                         total_loss = loss + reg_loss
                         # backward + optimize only if in training phase
                         if phase == 'train':
