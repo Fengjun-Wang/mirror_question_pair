@@ -24,17 +24,17 @@ class Siamese_CNN(nn.Module):
         self.dropout = nn.Dropout(p=0.4) ###
         self.conv1d_size2 = nn.Conv1d(in_channels=input_channel_len,
                                       out_channels=100,
-                                      kernel_size=2,
+                                      kernel_size=3,
                                       stride=1,
                                       padding=1)
         self.conv1d_size3 = nn.Conv1d(in_channels=input_channel_len,
                                       out_channels=100,
-                                      kernel_size=3,
+                                      kernel_size=4,
                                       stride=1,
                                       padding=1)
         self.conv1d_size4 = nn.Conv1d(in_channels=input_channel_len,
                                       out_channels=100,
-                                      kernel_size=4,
+                                      kernel_size=5,
                                       stride=1,
                                       padding=1)
         self.out_hidden1 = nn.Linear(600,300)
@@ -165,7 +165,7 @@ class Model(object):
 
 
 def train():
-    space = "words"
+    space = "chars"
     train_df = DataSet.load_train()
     xtr_df, xval_df = train_test_split(train_df, test_size=0.25)
     test_df = DataSet.load_test()
