@@ -5,12 +5,15 @@ sys.path.append("../")
 import torch
 import copy
 import time
+import os
 import pandas as pd
+import numpy as np
 import torch.optim as optim
 from feature_engineering.util import DataSet
 from sklearn.model_selection import train_test_split
 from itertools import ifilter
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.model_selection import KFold
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence,pack_sequence,pad_sequence
 from torch import nn as nn, autograd
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
@@ -56,31 +59,41 @@ class Siamese_LSTM(nn.Module):
         self.hidden = ( torch.zeros(self.number_layers*self.num_directions, batch_size, self.hidden_size),
                         torch.zeros(self.number_layers*self.num_directions, batch_size, self.hidden_size))
 
+    def sort(self,input_tensor):
+        input_lengths = torch.LongTensor([torch.max(input_tensor[i, :].data.nonzero()) + 1 for i in xrange(input_tensor.size(0))])
+        input_lengths, perm_idx = input_lengths.sort(0, descending=True)
+        _,reverse_perm_idx = perm_idx.sort(0)
+        input_seqs = input_tensor[perm_idx][:, :input_lengths.max()]
+        return input_seqs,input_lengths,reverse_perm_idx
 
     def forward(self, input):
         q1,q2  = torch.chunk(input, 2, dim=1) ## Split the question pairs
-        q1_embed = self.nn_Embedding(q1) ##NxLxC
-        q2_embed = self.nn_Embedding(q2) ##NxLxC
-        #batch_size = input.size(0)
+        q1,q1_lens,q1_reverse_order_indx = self.sort(q1)
+        q2,q2_lens,q2_reverse_order_indx = self.sort(q2)
+        q1_pad_embed = self.nn_Embedding(q1) ##NxLxC
+        q2_pad_embed = self.nn_Embedding(q2) ##NxLxC
+        q1_embed = self.input_dropout(q1_pad_embed)
+        q2_embed = self.input_dropout(q2_pad_embed)
+        q1_pack_pad_seq_embed = pack_padded_sequence(q1_embed, batch_first=True, lengths=q1_lens)
+        q2_pack_pad_seq_embed = pack_padded_sequence(q2_embed, batch_first=True, lengths=q2_lens)
 
-        #self.init_hidden(batch_size) ##Initialize h0 and c0
-        q1_embed = self.input_dropout(q1_embed)
-        q2_embed = self.input_dropout(q2_embed)
-        q1_out,q1_hidden = self.lstm(q1_embed)
+        q1_out,q1_hidden = self.lstm(q1_pack_pad_seq_embed)
         q1h,q1c = q1_hidden
-        #self.init_hidden(batch_size)
-        q2_out,q2_hidden = self.lstm(q2_embed)
+
+        q2_out,q2_hidden = self.lstm(q2_pack_pad_seq_embed)
         q2h,q2c = q2_hidden
 
         if self.bidirectional:
-            q1_embed = torch.cat((q1h[-2],q1h[-1]),dim=1)
-            q2_embed = torch.cat((q2h[-2],q2h[-1]),dim=1)
+            q1_encode = torch.cat((q1h[-2],q1h[-1]),dim=1)
+            q2_encode = torch.cat((q2h[-2],q2h[-1]),dim=1)
         else:
-            q1_embed = q1h[-1]
-            q2_embed = q2h[-1]
+            q1_encode = q1h[-1]
+            q2_encode = q2h[-1]
+        q1_encode_reverse = q1_encode[q1_reverse_order_indx]
+        q2_encode_reverse = q2_encode[q2_reverse_order_indx]
 
-        q_pair_embed = torch.cat((q1_embed,q2_embed),dim=1)
-        h1 = self.linear1_dropout(F.relu(self.linear1(q_pair_embed)))
+        q_pair_encode = torch.cat((q1_encode_reverse,q2_encode_reverse),dim=1)
+        h1 = self.linear1_dropout(F.relu(self.linear1(q_pair_encode)))
         out = self.linear2(h1)
         return out
 
@@ -89,22 +102,27 @@ class Siamese_LSTM(nn.Module):
 
 
 class Model(object):
-    def __init__(self,model):
+    def __init__(self,name,model):
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
-
-    def train(self,name,train_dg,valid_dg,criterion, optimizer, scheduler, num_epochs):
+        self.name = name
+        try:
+            os.makedirs(self.name)
+        except:
+            pass
+    def train(self,train_dg,valid_dg,criterion, optimizer, scheduler, num_epochs, early_stop_rounds):
         since = time.time()
         criterion = criterion.to(self.device)
         dataset_sizes = {"train":len(train_dg),"val":len(valid_dg)}
         best_model_wts = copy.deepcopy(self.model.state_dict())
         best_acc = 0.0
         best_loss = sys.maxsize
-        train_loss = []
-        train_acc = []
-        val_loss = []
-        val_acc = []
+        self.train_loss = []
+        self.train_acc = []
+        self.val_loss = []
+        self.val_acc = []
+        early_stop_epochs = 0
         for epoch in range(num_epochs):
             print('Epoch {}/{}'.format(epoch, num_epochs - 1))
             print('-' * 10)
@@ -145,9 +163,6 @@ class Model(object):
                             loss.backward()
                             optimizer.step()
 
-                    # statistics
-                    #print(preds.dtype)
-                    #print(labels.dtype)
                     running_loss += loss.item() * inputs.size(0) ## criteria size_average is True default
                     running_corrects += torch.sum(preds.data == labels.data) ## running_corrects are tensor dim 0
 
@@ -159,17 +174,28 @@ class Model(object):
 
                 ##Record the train and validation loss and accuracy for analysis
                 if phase=="train":
-                    train_loss.append(epoch_loss)
-                    train_acc.append(epoch_acc)
+                    self.train_loss.append(epoch_loss)
+                    self.train_acc.append(epoch_acc)
                 else:
-                    val_loss.append(epoch_loss)
-                    val_acc.append(epoch_acc)
-
-                # deep copy the model
-                if phase == 'val' and epoch_loss < best_loss:
-                    best_loss = epoch_loss
-                    best_acc = epoch_acc
-                    best_model_wts = copy.deepcopy(self.model.state_dict())
+                    self.val_loss.append(epoch_loss)
+                    self.val_acc.append(epoch_acc)
+                    if epoch_loss < best_loss:
+                        early_stop_epochs = 0
+                        best_loss = epoch_loss
+                        best_acc = epoch_acc
+                        best_model_wts = copy.deepcopy(self.model.state_dict())
+                    else:
+                        early_stop_epochs+=1
+                        if early_stop_epochs>=early_stop_rounds:
+                            time_elapsed = time.time() - since
+                            print()
+                            print('Training complete dut to early stopping in {:.0f}m {:.0f}s'.format(
+                                time_elapsed // 60, time_elapsed % 60))
+                            print('Best val Loss: {:4f}'.format(best_loss))
+                            print('Corresponding val Acc: {:4f}'.format(best_acc))
+                            self.model.load_state_dict(best_model_wts)
+                            torch.save(self.model.state_dict(), self.name+"/siamese_CNN_best_pars.pth")
+                            return self.model
 
             print()
 
@@ -181,20 +207,8 @@ class Model(object):
 
         # load best model weights
         self.model.load_state_dict(best_model_wts)
-        torch.save(self.model.state_dict(),"siamese_CNN_best_pars.pth")
+        torch.save(self.model.state_dict(),self.name+"/siamese_CNN_best_pars.pth")
 
-        plt.figure(figsize=(20, 8))
-        l1, = plt.plot(train_loss, "r-")
-        l2, = plt.plot(val_loss, "g-")
-        plt.legend([l1, l2], ["train_loss", "valid_loss"])
-        plt.grid()
-        plt.savefig(name+"_loss_trend.jpg")
-        plt.figure(figsize=(20, 8))
-        l1, = plt.plot(train_acc, "r-")
-        l2, = plt.plot(val_acc, "g-")
-        plt.legend([l1, l2], ["train_acc", "valid_acc"])
-        plt.grid()
-        plt.savefig(name+"_acc_trend.jpg")
         return self.model
 
     def predict(self,data_dg):
@@ -208,6 +222,19 @@ class Model(object):
                 preds[ids,:] = probs
         return preds.squeeze(dim=1).cpu()
 
+    def plot_(self):
+        plt.figure(figsize=(20, 8))
+        l1, = plt.plot(self.train_loss, "r-")
+        l2, = plt.plot(self.val_loss, "g-")
+        plt.legend([l1, l2], ["train_loss", "valid_loss"])
+        plt.grid()
+        plt.savefig(self.name+"/%s_loss_trend.jpg"%(self.name))
+        plt.figure(figsize=(20, 8))
+        l1, = plt.plot(self.train_acc, "r-")
+        l2, = plt.plot(self.val_acc, "g-")
+        plt.legend([l1, l2], ["train_acc", "valid_acc"])
+        plt.grid()
+        plt.savefig(self.name+"/%s_acc_trend.jpg"%(self.name))
 
 def train():
     space = "words"
@@ -219,15 +246,16 @@ def train():
     bidirectional = True
     linear_hidden_size = 300##TODO 100->300
     linear_hid_drop_p = 0.3
+    early_stop = 10
     train_name = "v0.1"
 
     train_df = DataSet.load_train()
     xtr_df, xval_df = train_test_split(train_df, test_size=0.25)
     test_df = DataSet.load_test()
     ### Generate data generator
-    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=True,is_test=False)
-    val_dg = DataGenerator(data_df=xval_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=False,is_test=False)
-    test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=True,is_shuffle=False,is_test=True)
+    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=False,is_shuffle=True,is_test=False)
+    val_dg = DataGenerator(data_df=xval_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=False,is_shuffle=False,is_test=False)
+    test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=False,is_shuffle=False,is_test=True)
     ### Must do prepare before using
     train_dg.prepare()
     val_dg.prepare()
@@ -246,18 +274,83 @@ def train():
                                input_drop_p = lstm_input_dropout)
 
     ### Initialize model using network
-    siamese_model = Model(siamese_lstm)
+    siamese_model = Model(train_name,siamese_lstm)
     criteria = nn.BCEWithLogitsLoss()
     optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=0.001) ##TODO 0.001
     exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.99)##TODO 0.99
     ### Train
-    siamese_model.train(train_name,train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,150) ##TODO 150
+    siamese_model.train(train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,150,early_stop) ##TODO 150
     preds = siamese_model.predict(test_dg).numpy()
     preds = pd.DataFrame({"y_pre":preds})
     preds.to_csv("submission.csv",index=False)
 
+def cv_main():
+##--------------parameters-------------------##
+    space = "words"
+    is_freeze = True
+    hidden_size = 100 ##TODO
+    num_layers = 2
+    lstm_dropput_p = 0.6 ##TODO
+    lstm_input_dropout = 0.6
+    bidirectional = True
+    linear_hidden_size = 200##TODO
+    linear_hid_drop_p = 0.3
+    batch_size = 512
+    folder = 5
+    early_stop = 10
+##--------------parameters-------------------##
+
+    kf = KFold(n_splits=folder,shuffle=True,random_state=19920618)
+    all_train_df = DataSet.load_train()
+    version = "v0.1"
+    test_df = DataSet.load_test()
+    test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=256,is_prefix_pad=False,is_shuffle=False,is_test=True)
+    print("prepare test data generator")
+    test_dg.prepare()
+    item_embed = test_dg.get_item_embed_tensor(space)
+    train_eval = np.zeros(len(all_train_df))
+    test_eval = np.zeros((len(test_df),folder))
+    for i,(train_index,val_index) in enumerate(kf.split(all_train_df)):
+        print()
+        train_name = version + "_cv_%s"%(i)
+        xtr_df = all_train_df.iloc[train_index]
+        xval_df = all_train_df.iloc[val_index]
+        train_dg = DataGenerator(data_df=xtr_df, space=space, bucket_num=5, batch_size=batch_size, is_prefix_pad=False,
+                                 is_shuffle=True, is_test=False)
+        val_dg = DataGenerator(data_df=xval_df, space=space, bucket_num=5, batch_size=256, is_prefix_pad=False,
+                               is_shuffle=False, is_test=False)
+        print("prepare train data generator, cv_%s"%i)
+        train_dg.prepare()
+        print("prepare val data generator, cv_%s" % i)
+        val_dg.prepare()
+        siamese_lstm = Siamese_LSTM(pre_trained_embedding=item_embed,
+                                    is_freeze=is_freeze,
+                                    hidden_size=hidden_size,
+                                    number_layers=num_layers,
+                                    lstm_dropout_p=lstm_dropput_p,
+                                    bidirectional=bidirectional,
+                                    linear_hid_size=linear_hidden_size,
+                                    linear_hid_drop_p=linear_hid_drop_p,
+                                    input_drop_p=lstm_input_dropout)
+        siamese_model = Model(train_name, siamese_lstm)
+        criteria = nn.BCEWithLogitsLoss()
+        optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=0.001)  ##TODO 0.001
+        exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.99)  ##TODO 0.99
+        ### Train
+        siamese_model.train(train_dg, val_dg, criteria, optimizer_ft, exp_lr_scheduler, 150,early_stop)  ##TODO 150
+        siamese_model.plot_()
+        val_pred = siamese_model.predict(val_dg).numpy()
+        train_eval[val_index] = val_pred
+        test_preds = siamese_model.predict(test_dg).numpy()
+        test_eval[:,i] = test_preds
+    train_pred_df = pd.DataFrame({"train_pred":train_eval})
+    train_pred_df.to_csv(version+"_train_pred.csv",index=False)
+    test_pred_df = pd.DataFrame(test_eval,columns=[version+"_test_pred_cv_%s"%(i) for i in xrange(folder)])
+    test_pred_df["y_pre"] = test_pred_df.mean(axis=1)
+    test_pred_df.to_csv(version+"_test_pred.csv",index=False)
+    test_pred_df[["y_pre"]].to_csv(version+"_submission.csv",index=False)
 
 ##BCEWithLogitsLoss
 #https://discuss.pytorch.org/t/how-to-initiate-parameters-of-layers/1460
 if __name__ == "__main__":
-    train()
+    cv_main()
