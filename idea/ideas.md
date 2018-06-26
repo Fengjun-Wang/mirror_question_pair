@@ -50,21 +50,33 @@ https://zhuanlan.zhihu.com/p/26996025
 [Text CNN2](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.723.6492&rep=rep1&type=pdf)
 [Text CNN1](http://www.joshuakim.io/understanding-how-convolutional-neural-network-cnn-perform-text-classification-with-word-embeddings/)
 
-
+[Semantic matching in seach 李航](http://www.hangli-hl.com/uploads/3/1/6/8/3168008/ml_for_match-step2.pdf)
 
 ## TO DO
 * [LDA NNE Embedding](http://scikit-learn.org/stable/auto_examples/applications/plot_topics_extraction_with_nmf_lda.html#sphx-glr-auto-examples-applications-plot-topics-extraction-with-nmf-lda-py): 
-    - all kinds of distance
-    - absdiff
+    - ~~all kinds of distance~~
+    - ~~absdiff~~
 * Add original embedding:
-    - Word SVD absdiff
-    - Char SVD absdiff
-    - Glove tfidf linear word (becasue word2vec already used equally)
-    - Glove tfidf linear char
-    - not add SVD word/char to sentence
+    - ~~Word SVD absdiff (word tfidf SVD 分解得到的sentence embed)~~
+    - ~~Char SVD absdiff (char tfidf SVD 分解得到的sentence embed)~~
+    - ~~Glove tfidf linear word (becasue word2vec already used equally)~~
+    - ~~Glove tfidf linear char~~
+    - ~~not add SVD word/char to sentence~~
     - maybe remove SVD word/char to sentence 
 * Add meta feature:
-    - question ends the same, or starts the same
+    - ~~question ends the same, or starts the same~~
     
 * Add graph feature:
     - page rank
+
+* Based on LSTM v4:
+    - try weight initialization
+    - try big hidden size(lstm and fcn)
+    - is_freeze False
+    - try chars
+
+* Similarity in CNN
+* Chars in CNN
+* Seq2Seq
+* try clustering in the feature space with high importance from lgm as new feature, maybe serve for stacking
+ 

@@ -9,6 +9,8 @@ import os
 import pandas as pd
 import numpy as np
 import torch.optim as optim
+import matplotlib.pyplot as plt
+from past.builtins import xrange
 from feature_engineering.util import DataSet
 from sklearn.model_selection import train_test_split
 from itertools import ifilter
@@ -18,7 +20,7 @@ from torch import nn as nn, autograd
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 from data import DataGenerator
-import matplotlib.pyplot as plt
+
 
 class Siamese_LSTM(nn.Module):
     def __init__(self,
@@ -112,6 +114,8 @@ class Model(object):
         except:
             pass
     def train(self,train_dg,valid_dg,criterion, optimizer, scheduler, num_epochs, early_stop_rounds):
+        if early_stop_rounds==-1: ##If it is -1, then cancel early stopping
+            early_stop_rounds = sys.maxsize
         since = time.time()
         criterion = criterion.to(self.device)
         dataset_sizes = {"train":len(train_dg),"val":len(valid_dg)}
@@ -126,7 +130,6 @@ class Model(object):
         for epoch in range(num_epochs):
             print('Epoch {}/{}'.format(epoch, num_epochs - 1))
             print('-' * 10)
-
             # Each epoch has a training and validation phase
             for phase in ['train', 'val']:
                 if phase == 'train':
@@ -134,10 +137,8 @@ class Model(object):
                     self.model.train()  # Set model to training mode
                 else:
                     self.model.eval()  # Set model to evaluate mode
-
                 running_loss = 0.0
                 running_corrects = 0
-
                 # Iterate over data.
                 sample_num = 0
                 data_loader = train_dg.get_data_generator() if phase=="train" else valid_dg.get_data_generator()
@@ -146,10 +147,8 @@ class Model(object):
                     sample_num += len(inputs)
                     inputs = inputs.to(self.device)
                     labels = labels.to(self.device)
-
                     # zero the parameter gradients
                     optimizer.zero_grad()
-
                     # forward
                     # track history if only in train
                     with torch.set_grad_enabled(phase == 'train'):
@@ -157,21 +156,16 @@ class Model(object):
                         preds = F.sigmoid(outputs)>0.5
                         preds = preds.type(torch.cuda.FloatTensor)
                         loss = criterion(outputs, labels)
-
                         # backward + optimize only if in training phase
                         if phase == 'train':
                             loss.backward()
                             optimizer.step()
-
                     running_loss += loss.item() * inputs.size(0) ## criteria size_average is True default
                     running_corrects += torch.sum(preds.data == labels.data) ## running_corrects are tensor dim 0
-
                 epoch_loss = running_loss / dataset_sizes[phase] ##average loss
                 epoch_acc = running_corrects.double().item() / dataset_sizes[phase]
-
                 print('{} Loss: {:.4f} Acc: {:.4f} Num: {}'.format(
                     phase, epoch_loss, epoch_acc,sample_num))
-
                 ##Record the train and validation loss and accuracy for analysis
                 if phase=="train":
                     self.train_loss.append(epoch_loss)
@@ -196,19 +190,15 @@ class Model(object):
                             self.model.load_state_dict(best_model_wts)
                             torch.save(self.model.state_dict(), self.name+"/siamese_CNN_best_pars.pth")
                             return self.model
-
             print()
-
         time_elapsed = time.time() - since
         print('Training complete in {:.0f}m {:.0f}s'.format(
             time_elapsed // 60, time_elapsed % 60))
         print('Best val Loss: {:4f}'.format(best_loss))
         print('Corresponding val Acc: {:4f}'.format(best_acc))
-
         # load best model weights
         self.model.load_state_dict(best_model_wts)
         torch.save(self.model.state_dict(),self.name+"/siamese_CNN_best_pars.pth")
-
         return self.model
 
     def predict(self,data_dg):
@@ -236,24 +226,30 @@ class Model(object):
         plt.grid()
         plt.savefig(self.name+"/%s_acc_trend.jpg"%(self.name))
 
-def train():
+def train_main():
+    ##--------------parameters-------------------##
     space = "words"
     is_freeze = True
-    hidden_size = 300 ##TODO 100->300
+    hidden_size = 300
     num_layers = 2
-    lstm_dropput_p = 0.6 ##TODO
-    lstm_input_dropout = 0.6
     bidirectional = True
-    linear_hidden_size = 300##TODO 100->300
+    lstm_drop_p = 0.6
+    lstm_input_drop_p = 0.6
+    linear_hidden_size = 300
     linear_hid_drop_p = 0.3
+    batch_size = 512
     early_stop = 10
+    LR = 0.001
+    Gamma = 0.99
+    num_epochs = 150
     train_name = "v0.1"
+    ##--------------parameters-------------------##
 
     train_df = DataSet.load_train()
     xtr_df, xval_df = train_test_split(train_df, test_size=0.25)
     test_df = DataSet.load_test()
     ### Generate data generator
-    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=False,is_shuffle=True,is_test=False)
+    train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=batch_size,is_prefix_pad=False,is_shuffle=True,is_test=False)
     val_dg = DataGenerator(data_df=xval_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=False,is_shuffle=False,is_test=False)
     test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=512,is_prefix_pad=False,is_shuffle=False,is_test=True)
     ### Must do prepare before using
@@ -267,42 +263,52 @@ def train():
                                is_freeze=is_freeze,
                                hidden_size=hidden_size,
                                number_layers=num_layers,
-                               lstm_dropout_p=lstm_dropput_p,
+                               lstm_dropout_p=lstm_drop_p,
                                bidirectional=bidirectional,
                                linear_hid_size=linear_hidden_size,
                                linear_hid_drop_p=linear_hid_drop_p,
-                               input_drop_p = lstm_input_dropout)
+                               input_drop_p = lstm_input_drop_p)
 
     ### Initialize model using network
     siamese_model = Model(train_name,siamese_lstm)
     criteria = nn.BCEWithLogitsLoss()
-    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=0.001) ##TODO 0.001
-    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.99)##TODO 0.99
+    optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=LR) ##TODO 0.001
+    exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=Gamma)##TODO 0.99
     ### Train
-    siamese_model.train(train_dg,val_dg,criteria,optimizer_ft,exp_lr_scheduler,150,early_stop) ##TODO 150
+    ##train_dg, valid_dg, criterion, optimizer, scheduler, num_epochs, early_stop_rounds
+    siamese_model.train(train_dg=train_dg,
+                        valid_dg=val_dg,
+                        criterion=criteria,
+                        optimizer=optimizer_ft,
+                        scheduler=exp_lr_scheduler,
+                        num_epochs=num_epochs,
+                        early_stop_rounds=early_stop)
     preds = siamese_model.predict(test_dg).numpy()
     preds = pd.DataFrame({"y_pre":preds})
     preds.to_csv("submission.csv",index=False)
 
 def cv_main():
-##--------------parameters-------------------##
+    ##--------------parameters-------------------##
     space = "words"
     is_freeze = True
     hidden_size = 100 ##TODO
     num_layers = 2
-    lstm_dropput_p = 0.6 ##TODO
-    lstm_input_dropout = 0.6
     bidirectional = True
+    lstm_drop_p = 0.6  ##TODO
+    lstm_input_drop_p = 0.6
     linear_hidden_size = 200##TODO
     linear_hid_drop_p = 0.3
     batch_size = 512
     folder = 5
     early_stop = 10
-##--------------parameters-------------------##
+    LR = 0.001
+    Gamma = 0.99
+    num_epochs = 150
+    version = "v0.1"
+    ##--------------parameters-------------------##
 
     kf = KFold(n_splits=folder,shuffle=True,random_state=19920618)
     all_train_df = DataSet.load_train()
-    version = "v0.1"
     test_df = DataSet.load_test()
     test_dg = DataGenerator(data_df=test_df,space=space,bucket_num=5,batch_size=256,is_prefix_pad=False,is_shuffle=False,is_test=True)
     print("prepare test data generator")
@@ -327,17 +333,23 @@ def cv_main():
                                     is_freeze=is_freeze,
                                     hidden_size=hidden_size,
                                     number_layers=num_layers,
-                                    lstm_dropout_p=lstm_dropput_p,
+                                    lstm_dropout_p=lstm_drop_p,
                                     bidirectional=bidirectional,
                                     linear_hid_size=linear_hidden_size,
                                     linear_hid_drop_p=linear_hid_drop_p,
-                                    input_drop_p=lstm_input_dropout)
+                                    input_drop_p=lstm_input_drop_p)
         siamese_model = Model(train_name, siamese_lstm)
         criteria = nn.BCEWithLogitsLoss()
-        optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=0.001)  ##TODO 0.001
-        exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=0.99)  ##TODO 0.99
+        optimizer_ft = optim.Adam(ifilter(lambda p: p.requires_grad, siamese_lstm.parameters()), lr=LR)  ##TODO 0.001
+        exp_lr_scheduler = lr_scheduler.ExponentialLR(optimizer_ft, gamma=Gamma)  ##TODO 0.99
         ### Train
-        siamese_model.train(train_dg, val_dg, criteria, optimizer_ft, exp_lr_scheduler, 150,early_stop)  ##TODO 150
+        siamese_model.train(train_dg=train_dg,
+                            valid_dg=val_dg,
+                            criterion=criteria,
+                            optimizer=optimizer_ft,
+                            scheduler=exp_lr_scheduler,
+                            num_epochs=num_epochs,
+                            early_stop_rounds=early_stop)
         siamese_model.plot_()
         val_pred = siamese_model.predict(val_dg).numpy()
         train_eval[val_index] = val_pred

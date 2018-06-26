@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
 import os
-#import pickle
 import hashlib
 sys.path.append("../")
 import numpy as np
@@ -11,7 +10,7 @@ try:
     import cPickle as pickle
 except:
     import pickle
-from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.utils.data import Dataset, DataLoader
 from past.builtins import xrange
 from feature_engineering.util import DataSet
 _PAD_ = "_PAD_"
@@ -167,7 +166,7 @@ class DataGenerator(object):
                 DataGenerator.idx2item = all_cached["idx2item"]
                 DataGenerator.item_embed = all_cached["item_embed"]
                 DataGenerator.q2idvec = all_cached["q2idvec"]
-            print("finish")
+            print("finish loading.")
         else:
             print("Generating intermediate files...")
             DataGenerator.item2idx = {}
@@ -215,7 +214,7 @@ class DataGenerator(object):
             print("finish caching")
 
     def prepare(self):
-        print("prepare necessary data...")
+        print("prepare %s data..."%(len(self.data_df)))
         q_len_title = ["%s_len_q%s"%(self.space[:-1],i) for i in [1,2]]
         q_pair_list = list(zip(self.data_df[q_len_title[0]],
                                self.data_df[q_len_title[1]]
@@ -228,7 +227,6 @@ class DataGenerator(object):
         self.bounds = bounds
         data_set_id_vectors = []
         q2idvs = DataGenerator.q2idvec[self.space]
-        print(len(self.data_df))
         for ind in xrange(len(self.data_df)):
             cur_row = self.data_df.iloc[ind]
             cur_q1 = cur_row["q1"]
@@ -250,6 +248,7 @@ class DataGenerator(object):
         print("prepare done.")
 
     def get_data_generator(self):
+        #np.random.seed(random_state)
         bucketkeys = list(self.buckets.keys())
         if self.is_shuffle:
             np.random.shuffle(bucketkeys)
@@ -264,6 +263,8 @@ class DataGenerator(object):
             tmpsels = np.arange(len(tmpids))
             if self.is_shuffle:
                 np.random.shuffle(tmpsels)
+            if self.batch_size == -1:
+                self.batch_size = len(tmpids)
             if len(tmpids)%self.batch_size == 0:
                 nums = len(tmpids)/self.batch_size
             else:
