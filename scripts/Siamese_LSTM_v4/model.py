@@ -108,10 +108,13 @@ class Siamese_LSTM(nn.Module):
         q1_encode_reverse = q1_encode[q1_reverse_order_indx]
         q2_encode_reverse = q2_encode[q2_reverse_order_indx]
 
-        q_pair_encode = torch.cat((q1_encode_reverse,q2_encode_reverse),dim=1)
+        q_pair_encode_q12= torch.cat((q1_encode_reverse,q2_encode_reverse),dim=1)##TODO augment q1,q2 ; q2,q1
+        q_pair_encode_q21 = torch.cat((q2_encode_reverse,q1_encode_reverse),dim=1)
+        q_pair_encode = torch.cat((q_pair_encode_q12,q_pair_encode_q21),dim=0)
         h1 = self.linear1_dropout(F.relu(self.linear1(q_pair_encode)))
         out = self.linear2(h1)
-        return out
+        out1,out2 = torch.chunk(out,2,dim=0)
+        return (out1+out2)/2
 
 
 class Model(object):
@@ -198,7 +201,11 @@ class Model(object):
                             early_stop_flag = True
             print()
         time_elapsed = time.time() - since
-        print('Training complete in {:.0f}m {:.0f}s'.format(
+        if early_stop_flag:
+            print('Training complete due to early stopping in {:.0f}m {:.0f}s'.format(
+                time_elapsed // 60, time_elapsed % 60))
+        else:
+            print('Training complete in {:.0f}m {:.0f}s'.format(
             time_elapsed // 60, time_elapsed % 60))
         print('Best val Loss: {:4f}'.format(best_loss))
         print('Corresponding val Acc: {:4f}'.format(best_acc))
@@ -242,15 +249,15 @@ class Model(object):
 ##TODO Put parameters here
 ##--------------parameters-------------------##
 space = "words"
-is_freeze = True
-hidden_size = 300 ##TODO 100->300
+is_freeze = False ##TODO
+hidden_size = 100 ##TODO 100->300->100
 num_layers = 2
 bidirectional = True
 lstm_drop_p = 0.6
 lstm_input_drop_p = 0.6
-linear_hidden_size = 600##TODO 200->600
+linear_hidden_size = 200##TODO 200->600->200
 linear_hid_drop_p = 0.3
-batch_size = 512
+batch_size = 256 ##TODO 512->256
 folder = 5
 early_stop = 10
 LR = 0.001
@@ -265,7 +272,7 @@ def train_main():
     ##--------------parameters-------------------##
 
     train_df = DataSet.load_train()
-    xtr_df, xval_df = train_test_split(train_df, test_size=0.25)
+    xtr_df, xval_df = train_test_split(train_df, test_size=0.20)
     test_df = DataSet.load_test()
     ### Generate data generator
     train_dg = DataGenerator(data_df=xtr_df,space=space,bucket_num=5,batch_size=batch_size,is_prefix_pad=False,is_shuffle=True,is_test=False)
@@ -366,4 +373,5 @@ def cv_main():
 ##BCEWithLogitsLoss
 #https://discuss.pytorch.org/t/how-to-initiate-parameters-of-layers/1460
 if __name__ == "__main__":
+    #train_main()
     cv_main()
