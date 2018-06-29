@@ -62,6 +62,8 @@ https://arxiv.org/pdf/1702.03814.pdf
 
 https://arxiv.org/pdf/1606.01933.pdf
 
+https://github.com/JeremyHide/BiMPM_Pytorch/blob/master/models/MultiPerspective.py
+
 [set forget bias 1](https://discuss.pytorch.org/t/set-forget-gate-bias-of-lstm/1745/3)
 
 [Attention-Based Convolutional Neural Network
