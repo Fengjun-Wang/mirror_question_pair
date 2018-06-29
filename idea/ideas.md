@@ -53,6 +53,8 @@ https://zhuanlan.zhihu.com/p/26996025
 [Semantic matching in seach 李航](http://www.hangli-hl.com/uploads/3/1/6/8/3168008/ml_for_match-step2.pdf)
 
 [Sementic similarity Quora deep learning methods](https://engineering.quora.com/Semantic-Question-Matching-with-Deep-Learning)
+
+[RNN训练技巧](https://www.zhihu.com/question/57828011)
 ## TO DO
 * [LDA NNE Embedding](http://scikit-learn.org/stable/auto_examples/applications/plot_topics_extraction_with_nmf_lda.html#sphx-glr-auto-examples-applications-plot-topics-extraction-with-nmf-lda-py): 
     - ~~all kinds of distance~~
