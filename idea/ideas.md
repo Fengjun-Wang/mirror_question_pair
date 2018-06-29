@@ -53,6 +53,19 @@ https://zhuanlan.zhihu.com/p/26996025
 [Semantic matching in seach 李航](http://www.hangli-hl.com/uploads/3/1/6/8/3168008/ml_for_match-step2.pdf)
 
 [Sementic similarity Quora deep learning methods](https://engineering.quora.com/Semantic-Question-Matching-with-Deep-Learning)
+
+https://web.stanford.edu/class/cs224n/reports/2759336.pdf
+
+https://arxiv.org/pdf/1702.03814.pdf
+
+https://arxiv.org/pdf/1702.03814.pdf
+
+https://arxiv.org/pdf/1606.01933.pdf
+
+[set forget bias 1](https://discuss.pytorch.org/t/set-forget-gate-bias-of-lstm/1745/3)
+
+[Attention-Based Convolutional Neural Network
+for Modeling Sentence Pairs](https://arxiv.org/pdf/1512.05193.pdf)
 ## TO DO
 * [LDA NNE Embedding](http://scikit-learn.org/stable/auto_examples/applications/plot_topics_extraction_with_nmf_lda.html#sphx-glr-auto-examples-applications-plot-topics-extraction-with-nmf-lda-py): 
     - ~~all kinds of distance~~
@@ -78,8 +91,19 @@ https://zhuanlan.zhihu.com/p/26996025
     - try chars
     - try CNN plus LSTM
 
+
+* CNN+LSTM 不是很好
 * Similarity in CNN
 * Chars in CNN
 * Seq2Seq
 * try clustering in the feature space with high importance from lgm as new feature, maybe serve for stacking
  
+ * Stacking; multi-layer stacking; do cv when stacking; choose models near 0.2
+ * 所以争取多做一些模型到0.2以内，最好是不同的结构，现在只是在lstm上面,争取CNN,seq2seq也到0.2以内
+ * 要不要神经网络中加入hand-crafted feature
+ * CNN 的dropout 可以用在pooling 之后，用在之前是不是作用不是很明显，因为dropout的不是最大值，就没啥用
+ * lstm 不只用最后的state,或者不是简单的拼接,比如加上减法，相乘
+ * lstm 加上interaction
+ * CNN 
+    - atttention
+    - similarity non-similarity 这篇论文
