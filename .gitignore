@@ -13,10 +13,6 @@ __pycache__/
 *.pkl
 *.npz
 *.npy
-.npy
-.npz
-.pkl
-.pth
 *.pth
 # Distribution / packaging
 .Python
