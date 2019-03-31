@@ -8,15 +8,15 @@ SentenceEmbedding: composed by Word/Char Embedding with weighting strategies - e
 
 
 Experiment 1: 
-Plenty hand-crafted features (e.g., Word Mover's Distance)
-LightGBM algorithm
+- Plenty hand-crafted features (e.g., Word Mover's Distance)
+- LightGBM algorithm
 
 Experiment 2:
-Take Siamese network architecture, apply different variations like CNN, RNN, RNN after CNN constructions as core layers.
+- Take Siamese network architecture, apply different variations like CNN, RNN, RNN after CNN constructions as core layers.
 The RNN part takes advantage of PyTorch pac_padded_sequence function to deal with variable length sentences. 
 
 Experiment 3:
-Apply BIMPM(Bilateral Multi-Perspective Matching for Natural Language Sentences), in order to introduce corrections between two sub-networks of Siamese. 
+- Apply BIMPM(Bilateral Multi-Perspective Matching for Natural Language Sentences), in order to introduce corrections between two sub-networks of Siamese. 
 
 
 Check full description and more details in https://sunnyyeti.github.io/2018/11/06/mirror-question-pair-detection/
