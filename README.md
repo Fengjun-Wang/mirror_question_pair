@@ -20,6 +20,8 @@ The RNN part takes advantage of PyTorch pac_padded_sequence function to deal wit
 Experiment 3:
 - Apply BIMPM(Bilateral Multi-Perspective Matching for Natural Language Sentences), in order to introduce corrections between two sub-networks of Siamese. BIMPM considers relationships among chars and also among words, while introduce more parameters to tune at the same time. 
 
+(Diff versioning folders are for convenience of recover/ensemble during the fast-paced competition period. )
+
 ## Full description of this project
 Check full description and more details in https://sunnyyeti.github.io/2018/11/06/mirror-question-pair-detection/
 
