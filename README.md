@@ -3,9 +3,9 @@
 Problem formulation: Score question pairs on synonym criteria
 
 ## Pre-processing
-WordEmbedding, CharEmbedding: word2vec, glove, decompose tfidf matrix using SVD (Singular Value Decomposition), decompose tfidf matrix using LDA (Latent Dirichlet Allocation), decompose tfidf matrix using NMF (Non-Negative Matrix Factorization). 
+WordEmbedding, CharEmbedding: word2vec; glove; decompose tfidf matrix using SVD (Singular Value Decomposition), decompose tfidf matrix using LDA (Latent Dirichlet Allocation), decompose tfidf matrix using NMF (Non-Negative Matrix Factorization). 
 
-SentenceEmbedding: composed by Word/Char Embedding with weighting strategies - equally, or tf-idf linear, or tf-idf exponentially
+SentenceEmbedding: get the sentence embedding directly - tfidf matrix embedding, decompose etc.;synthesized by Word/Char Embedding with weighting strategies - equally, or tf-idf linear, or tf-idf exponentially
 
 ## Modeling
 
