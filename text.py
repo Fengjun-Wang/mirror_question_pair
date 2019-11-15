@@ -1,1 +1,0 @@
-test mac git ssh
