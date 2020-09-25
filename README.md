@@ -2,6 +2,8 @@
 
 Problem formulation: Score question pairs on synonym criteria
 
+This is an online competition hosted by one Chinese company which aims to predict whether a given pair of questions actually share the same meaning semantically. Because of privacy, all original questions are encoded as sequences of char ID and word ID. Char may contain single Chinese word, single English letter, punctuation and space. Word may contain Chinese and English words, punctuation and space.
+
 ## Pre-processing
 WordEmbedding, CharEmbedding: word2vec; glove; decompose tfidf matrix using SVD (Singular Value Decomposition), decompose tfidf matrix using LDA (Latent Dirichlet Allocation), decompose tfidf matrix using NMF (Non-Negative Matrix Factorization). 
 
@@ -23,7 +25,7 @@ Experiment 3:
 (Diff versioning folders are for convenience of recover/ensemble during the fast-paced competition period. )
 
 ## Full description of this project
-Check full description and more details in https://sunnyyeti.github.io/2018/11/06/mirror-question-pair-detection/
+Check full description and more details about model structures in https://sunnyyeti.github.io/post/mirror-question-pair-detection/
 
 ## Future dev
 Well, after we develop the model, BERT becomes popular and is showing its super power in NLP domain. 
