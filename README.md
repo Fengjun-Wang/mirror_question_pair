@@ -2,7 +2,8 @@
 
 Problem formulation: Score question pairs on synonym criteria
 
-This is an online competition hosted by one Chinese company which aims to predict whether a given pair of questions actually share the same meaning semantically. Because of privacy, all original questions are encoded as sequences of char ID and word ID. Char may contain single Chinese word, single English letter, punctuation and space. Word may contain Chinese and English words, punctuation and space.
+This is an online competition hosted by one Chinese company which aims to predict whether a given pair of questions actually share the same meaning semantically. Because of data privacy protection, all original questions are encoded as sequences of char ID and word ID. Thus, we can't leverage on open source pre-trained sentence embeddings or word embeddings. The competition organers provide their own word embedding and char embedding for us. In this way, they keep the data privacy as well as fairness. 
+Char may contain single Chinese word, single English letter, punctuation and space. Word may contain Chinese and English words, punctuation and space.
 
 ## Pre-processing
 WordEmbedding, CharEmbedding: word2vec; glove; decompose tfidf matrix using SVD (Singular Value Decomposition), decompose tfidf matrix using LDA (Latent Dirichlet Allocation), decompose tfidf matrix using NMF (Non-Negative Matrix Factorization). 
